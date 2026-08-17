@@ -4,8 +4,8 @@ export class AttackCommander {
   private currentHealth: number;
   private currentPosition: GridPosition;
   private attackCooldownRemainingMs = 0;
-  private rallyCooldownRemainingMs = 0;
-  private disruptCooldownRemainingMs = 0;
+  private focusFireCooldownRemainingMs = 0;
+  private currentDisruptCooldownRemainingMs = 0;
 
   public constructor(
     startPosition: GridPosition,
@@ -34,12 +34,16 @@ export class AttackCommander {
     return this.currentHealth > 0;
   }
 
-  public get canRally(): boolean {
-    return this.rallyCooldownRemainingMs === 0;
+  public get canFocusFire(): boolean {
+    return this.focusFireCooldownRemainingMs === 0;
   }
 
   public get canDisrupt(): boolean {
-    return this.disruptCooldownRemainingMs === 0;
+    return this.currentDisruptCooldownRemainingMs === 0;
+  }
+
+  public get disruptCooldownRemainingMs(): number {
+    return this.currentDisruptCooldownRemainingMs;
   }
 
   public moveTo(position: GridPosition): void {
@@ -52,10 +56,13 @@ export class AttackCommander {
 
   public updateCooldowns(deltaMs: number): void {
     this.attackCooldownRemainingMs = Math.max(0, this.attackCooldownRemainingMs - deltaMs);
-    this.rallyCooldownRemainingMs = Math.max(0, this.rallyCooldownRemainingMs - deltaMs);
-    this.disruptCooldownRemainingMs = Math.max(
+    this.focusFireCooldownRemainingMs = Math.max(
       0,
-      this.disruptCooldownRemainingMs - deltaMs,
+      this.focusFireCooldownRemainingMs - deltaMs,
+    );
+    this.currentDisruptCooldownRemainingMs = Math.max(
+      0,
+      this.currentDisruptCooldownRemainingMs - deltaMs,
     );
   }
 
@@ -67,15 +74,15 @@ export class AttackCommander {
     this.attackCooldownRemainingMs = this.attackIntervalMs;
   }
 
-  public consumeRally(cooldownMs: number): boolean {
-    if (!this.canRally) return false;
-    this.rallyCooldownRemainingMs = cooldownMs;
+  public consumeFocusFire(cooldownMs: number): boolean {
+    if (!this.canFocusFire) return false;
+    this.focusFireCooldownRemainingMs = cooldownMs;
     return true;
   }
 
   public consumeDisrupt(cooldownMs: number): boolean {
     if (!this.canDisrupt) return false;
-    this.disruptCooldownRemainingMs = cooldownMs;
+    this.currentDisruptCooldownRemainingMs = cooldownMs;
     return true;
   }
 }

@@ -4,27 +4,58 @@ import { GridMap } from '../grid/GridMap';
 import { GridPosition } from '../grid/GridPosition';
 import { BreadthFirstPathfinder } from '../pathfinding/BreadthFirstPathfinder';
 import { DefenseStructure } from '../structures/DefenseStructure';
+import { FixedTowerUpgradePolicy } from '../structures/TowerUpgradePolicy';
 import {
   DefenseCombat,
   type DefenseCombatConfig,
 } from './DefenseCombat';
 import type { DefenseEnemyStats } from './DefenseEnemy';
+import { TieredCoreLeakDamagePolicy } from './CoreLeakDamagePolicy';
 import { DefenseWave } from './DefenseWave';
 
 const defaultConfig: DefenseCombatConfig = {
   coreMaxHealth: 100,
-  tower: {
-    rangeInCells: 2.5,
-    damage: 10,
-    attackIntervalMs: 100,
+  coreLeakDamagePolicy: new TieredCoreLeakDamagePolicy({
+    2: 6,
+    3: 12,
+    4: 24,
+  }),
+  towerUpgradePolicy: new FixedTowerUpgradePolicy({
+    maxLevel: 2,
+    costs: { popgun: 2, mortar: 3, piercer: 4 },
+    damageMultiplierPerLevel: 1.3,
+    maxHealthMultiplierPerLevel: 1.2,
+  }),
+  towers: {
+    popgun: {
+      rangeInCells: 2.5,
+      damage: 10,
+      attackIntervalMs: 100,
+      splashRadiusInCells: 0,
+    },
+    mortar: {
+      rangeInCells: 2.5,
+      damage: 10,
+      attackIntervalMs: 100,
+      splashRadiusInCells: 1,
+    },
+    piercer: {
+      rangeInCells: 2.5,
+      damage: 10,
+      attackIntervalMs: 100,
+      splashRadiusInCells: 0,
+    },
   },
 };
 
 const durableEnemy: DefenseEnemyStats = {
+  archetype: 'tank',
+  cost: 4,
   maxHealth: 100,
   movementSpeed: 2,
   attackDamage: 20,
   attackIntervalMs: 100,
+  attackRange: 1.1,
 };
 
 function createBattlefield(columns = 5, rows = 3): Battlefield {
@@ -64,6 +95,33 @@ describe('DefenseCombat', () => {
     expect(combat.coreHealth).toBe(100);
   });
 
+  it('applies the tower upgrade damage multiplier during defense', () => {
+    const battlefield = createBattlefield();
+    const tower = new DefenseStructure(
+      'tower',
+      'tower',
+      new GridPosition(1, 0),
+      100,
+    );
+    tower.upgradeToNextLevel(1.2);
+    battlefield.place(tower);
+    const enemy: DefenseEnemyStats = {
+      ...durableEnemy,
+      maxHealth: 12,
+      attackDamage: 1,
+    };
+    const combat = new DefenseCombat(
+      battlefield,
+      new DefenseWave([{ delayMs: 0, entryIndex: 0, stats: enemy }]),
+      defaultConfig,
+    );
+
+    combat.update(50);
+
+    expect(combat.killCount).toBe(1);
+    expect(combat.state).toBe('won');
+  });
+
   it('lets an adjacent enemy destroy a structure and reopen its cell', () => {
     const battlefield = createBattlefield();
     battlefield.place(
@@ -86,24 +144,39 @@ describe('DefenseCombat', () => {
     expect(battlefield.findPathFrom(new GridPosition(1, 1))).not.toBeNull();
   });
 
-  it('loses the defense when enemies reduce core health to zero', () => {
+  it('applies one cost-based leak hit and removes an enemy that reaches the core', () => {
     const battlefield = createBattlefield(3, 3);
-    const crushingEnemy: DefenseEnemyStats = {
-      ...durableEnemy,
-      movementSpeed: 4,
-      attackDamage: 50,
-    };
     const combat = new DefenseCombat(
       battlefield,
-      new DefenseWave([
-        { delayMs: 0, entryIndex: 0, stats: crushingEnemy },
-      ]),
+      new DefenseWave([{ delayMs: 0, entryIndex: 0, stats: durableEnemy }]),
       defaultConfig,
     );
 
     combat.update(2_000);
 
+    expect(combat.coreHealth).toBe(76);
+    expect(combat.leakCount).toBe(1);
+    expect(combat.leakDamage).toBe(24);
+    expect(combat.killCount).toBe(0);
+    expect(combat.enemies).toHaveLength(0);
+    expect(combat.state).toBe('won');
+  });
+
+  it('loses the defense when cost-based leak damage reduces core health to zero', () => {
+    const battlefield = createBattlefield(3, 3);
+    const combat = new DefenseCombat(
+      battlefield,
+      new DefenseWave([
+        { delayMs: 0, entryIndex: 0, stats: durableEnemy },
+      ]),
+      { ...defaultConfig, coreMaxHealth: 20 },
+    );
+
+    combat.update(2_000);
+
     expect(combat.coreHealth).toBe(0);
+    expect(combat.leakCount).toBe(1);
+    expect(combat.leakDamage).toBe(20);
     expect(combat.state).toBe('lost');
   });
 

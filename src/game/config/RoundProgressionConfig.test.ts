@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import {
   createPrototypeAttackCombatConfig,
-  createPrototypeSquadPlan,
 } from './AttackCombatConfig';
+import { createPrototypeSquadPlan } from './AttackSquadConfig';
 import { createPrototypeDefenseWave } from './DefenseCombatConfig';
 
 describe('prototype round progression', () => {
@@ -24,6 +24,8 @@ describe('prototype round progression', () => {
 
     expect(fifthPlan.totalBudget).toBeGreaterThan(firstPlan.totalBudget);
     expect(fifthCombat.coreMaxHealth).toBeGreaterThan(firstCombat.coreMaxHealth);
-    expect(fifthCombat.tower.damage).toBeGreaterThan(firstCombat.tower.damage);
+    expect(fifthCombat.towers.popgun.damage).toBeGreaterThan(
+      firstCombat.towers.popgun.damage,
+    );
   });
 });

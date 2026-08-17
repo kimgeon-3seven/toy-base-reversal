@@ -12,27 +12,60 @@ import {
 import {
   ATTACK_PREPARATION_DURATION_MS,
   createPrototypeAttackCombatConfig,
-  createPrototypeSquadPlan,
 } from '../../config/AttackCombatConfig';
+import {
+  createPrototypeSquadPlan,
+  SIMULTANEOUS_CAPACITY_PER_LANE,
+  SQUAD_SPAWN_INTERVAL_MS,
+} from '../../config/AttackSquadConfig';
 import {
   createPrototypeDefenseCombatConfig,
   createPrototypeDefenseWave,
   PREPARATION_DURATION_MS,
 } from '../../config/DefenseCombatConfig';
 import { GAME_COLORS, GAME_HEIGHT } from '../../config/GameConfig';
+import { INITIAL_DEFENSE_PLACEMENTS } from '../../config/InitialDefenseConfig';
+import {
+  isTowerAvailable,
+  isUnitAvailable,
+  TOWER_NAMES,
+  UNIT_NAMES,
+} from '../../config/ContentConfig';
+import {
+  createPrototypeConstructionEconomy,
+  OBSTACLE_CONSTRUCTION_COST,
+  ROUND_CONSTRUCTION_REWARD,
+  TOWER_CONSTRUCTION_COSTS,
+} from '../../config/ConstructionEconomyConfig';
+import {
+  createPrototypeTowerUpgradePolicy,
+  MAX_TOWER_LEVEL,
+} from '../../config/TowerUpgradeConfig';
 import { Battlefield } from '../../domain/battlefield/Battlefield';
-import type { BattlefieldFailureReason } from '../../domain/battlefield/BattlefieldResult';
+import type { DefenseEditFailureReason } from '../../application/DefenseEditResult';
 import { AttackCombat } from '../../domain/attack/AttackCombat';
-import type { AttackUnitKind, SquadPlan } from '../../domain/attack/SquadPlan';
+import {
+  attackUnitCost,
+  type AttackUnitKind,
+  type SquadPlan,
+} from '../../domain/attack/SquadPlan';
 import { DefenseCombat } from '../../domain/combat/DefenseCombat';
+import type { TowerArchetype } from '../../domain/combat/CombatArchetype';
 import { GridPosition } from '../../domain/grid/GridPosition';
 import { BreadthFirstPathfinder } from '../../domain/pathfinding/BreadthFirstPathfinder';
 import { RoundSession } from '../../domain/rounds/RoundSession';
 import type { StructureKind } from '../../domain/structures/DefenseStructure';
 
-const STRUCTURE_COLORS: Readonly<Record<StructureKind, number>> = {
-  tower: 0xffc857,
-  obstacle: 0xb8a1d9,
+const TOWER_COLORS: Readonly<Record<TowerArchetype, number>> = {
+  popgun: 0xffc857,
+  mortar: 0xff8c61,
+  piercer: 0x8bd17c,
+};
+
+const UNIT_COLORS: Readonly<Record<AttackUnitKind, number>> = {
+  tank: 0x5da9e9,
+  swarm: 0xffd166,
+  ranger: 0xf4a6d7,
 };
 
 const PATH_COLORS = [0x59c3c3, 0xff8c61, 0x8bd17c] as const;
@@ -59,6 +92,7 @@ export class BattlefieldScene extends Phaser.Scene {
   private resultText!: Phaser.GameObjects.Text;
   private helpText!: Phaser.GameObjects.Text;
   private activeKind: StructureKind = 'tower';
+  private activeTowerArchetype: TowerArchetype = 'popgun';
   private selectedStructureId: string | null = null;
   private phase: DefenseScenePhase = 'preparation';
   private preparationRemainingMs = PREPARATION_DURATION_MS;
@@ -69,6 +103,8 @@ export class BattlefieldScene extends Phaser.Scene {
   private roundSession = new RoundSession(5);
   private selectedAttackLane = 1;
   private selectedAttackUnitKind: AttackUnitKind = 'tank';
+  private isFocusTargeting = false;
+  private isDisruptTargeting = false;
   private commanderMoveKeys!: {
     up: Phaser.Input.Keyboard.Key;
     down: Phaser.Input.Keyboard.Key;
@@ -86,7 +122,11 @@ export class BattlefieldScene extends Phaser.Scene {
       createBattlefieldMap(),
       new BreadthFirstPathfinder(),
     );
-    this.editor = new DefenseEditor(battlefield);
+    this.editor = new DefenseEditor(
+      battlefield,
+      createPrototypeConstructionEconomy(),
+      createPrototypeTowerUpgradePolicy(),
+    );
 
     this.seedInitialDesign();
     this.editor.saveBlueprint();
@@ -169,21 +209,27 @@ export class BattlefieldScene extends Phaser.Scene {
   }
 
   private seedInitialDesign(): void {
-    this.editor.place('tower', new GridPosition(7, 4));
-    this.editor.place('tower', new GridPosition(11, 8));
-    this.editor.place('tower', new GridPosition(16, 4));
-    this.editor.place('obstacle', new GridPosition(13, 6));
+    for (const placement of INITIAL_DEFENSE_PLACEMENTS) {
+      const position = new GridPosition(placement.column, placement.row);
+      const result =
+        placement.kind === 'tower'
+          ? this.editor.placeTower(placement.towerArchetype, position)
+          : this.editor.place('obstacle', position);
+      if (!result.success) {
+        throw new Error(`Initial defense placement failed: ${result.reason}`);
+      }
+    }
   }
 
   private createStaticInterface(): void {
-    this.add.text(32, 24, '4단계 · 5라운드 순환 프로토타입', {
+    this.add.text(32, 24, '5단계 · 장난감 상성 전투 프로토타입', {
       color: GAME_COLORS.primary,
       fontFamily: 'Arial, sans-serif',
       fontSize: '32px',
       fontStyle: 'bold',
     });
 
-    this.add.text(32, 70, '방어와 역공을 반복해 5라운드 장난감 전쟁을 완수하세요.', {
+    this.add.text(32, 70, '세 가지 장난감 병과의 상성을 이용해 방어하고 역공하세요.', {
       color: GAME_COLORS.text,
       fontFamily: 'Arial, sans-serif',
       fontSize: '18px',
@@ -209,7 +255,7 @@ export class BattlefieldScene extends Phaser.Scene {
 
     this.helpText = this.add.text(
       1020,
-      220,
+      280,
       [
         '[1] 공격 타워',
         '[2] 장애물',
@@ -277,33 +323,37 @@ export class BattlefieldScene extends Phaser.Scene {
   private configureKeyboardInput(): void {
     this.input.keyboard?.on('keydown-ONE', () => {
       if (this.phase === 'attack-preparation') {
-        this.selectedAttackUnitKind = 'tank';
-        this.setStatus('탱커 선택: Q/W/E로 진입로 대기열에 추가합니다.');
-        this.updatePhaseInterface();
+        this.selectAttackUnit('tank');
         return;
       }
-      if (this.phase !== 'preparation') {
-        return;
-      }
-      this.activeKind = 'tower';
-      this.selectedStructureId = null;
-      this.setStatus('공격 타워 배치 모드');
-      this.renderBattlefield();
+      this.selectTower('popgun');
     });
 
     this.input.keyboard?.on('keydown-TWO', () => {
       if (this.phase === 'attack-preparation') {
-        this.selectedAttackUnitKind = 'ranger';
-        this.setStatus('원거리 병사 선택: Q/W/E로 진입로 대기열에 추가합니다.');
-        this.updatePhaseInterface();
+        this.selectAttackUnit('swarm');
         return;
       }
+      this.selectTower('mortar');
+    });
+
+    this.input.keyboard?.on('keydown-THREE', () => {
+      if (this.phase === 'attack-preparation') {
+        this.selectAttackUnit('ranger');
+        return;
+      }
+      this.selectTower('piercer');
+    });
+
+    this.input.keyboard?.on('keydown-FOUR', () => {
       if (this.phase !== 'preparation') {
         return;
       }
       this.activeKind = 'obstacle';
       this.selectedStructureId = null;
-      this.setStatus('장애물 배치 모드');
+      this.setStatus(
+        `블록 벽 배치 모드: 부품 ${OBSTACLE_CONSTRUCTION_COST}, 공격 능력 없이 진로를 지연시킵니다.`,
+      );
       this.renderBattlefield();
     });
 
@@ -312,13 +362,15 @@ export class BattlefieldScene extends Phaser.Scene {
         return;
       }
       this.editor.saveBlueprint();
-      this.setStatus('현재 방어 설계를 저장했습니다.');
+      this.setStatus(
+        `현재 방어 설계와 남은 부품 ${this.editor.constructionFunds}을 저장했습니다.`,
+      );
     });
 
     this.input.keyboard?.on('keydown-R', () => {
       if (this.phase === 'attack-result') {
         if (this.attackCombat?.state === 'lost') {
-          this.startAttackPreparation();
+          this.restartCampaign();
         }
         return;
       }
@@ -339,7 +391,7 @@ export class BattlefieldScene extends Phaser.Scene {
       this.selectedStructureId = null;
       this.setStatus(
         restored
-          ? '저장한 설계를 복원하고 모든 시설 체력을 초기화했습니다.'
+          ? `저장한 설계와 부품 ${this.editor.constructionFunds}을 복원하고 시설 체력을 초기화했습니다.`
           : '복원할 설계가 없습니다.',
       );
       this.renderBattlefield();
@@ -356,7 +408,28 @@ export class BattlefieldScene extends Phaser.Scene {
 
       this.editor.destroy(this.selectedStructureId);
       this.selectedStructureId = null;
-      this.setStatus('선택한 시설을 파괴했습니다. 열린 경로를 다시 계산했습니다.');
+      this.setStatus(
+        '선택한 시설을 파괴했습니다. 파괴에는 부품 환급이 없습니다.',
+      );
+      this.renderBattlefield();
+    });
+
+    this.input.keyboard?.on('keydown-U', () => {
+      if (this.phase !== 'preparation') return;
+      if (this.selectedStructureId === null) {
+        this.setStatus('먼저 업그레이드할 타워를 선택하세요.', true);
+        return;
+      }
+
+      const result = this.editor.upgradeTower(this.selectedStructureId);
+      if (!result.success) {
+        this.setStatus(this.failureMessage(result.reason), true);
+        return;
+      }
+
+      this.setStatus(
+        `타워를 ${result.receipt.level}레벨로 강화하고 건설 부품 ${result.receipt.cost}을 사용했습니다.`,
+      );
       this.renderBattlefield();
     });
 
@@ -383,11 +456,14 @@ export class BattlefieldScene extends Phaser.Scene {
       if (this.phase === 'attack-preparation') {
         this.addUnitToLane(0);
       } else if (this.phase === 'attack-combat') {
-        const activated = this.attackCombat?.activateRally() ?? false;
-        this.setStatus(
-          activated ? '집결! 부대가 지휘관 주변으로 모입니다.' : '집결 재사용 대기 중입니다.',
-          !activated,
-        );
+        if (this.attackCombat?.canIssueFocusFire !== true) {
+          this.setStatus('집중 공격 재사용 대기 중입니다.', true);
+          return;
+        }
+        this.isDisruptTargeting = false;
+        this.isFocusTargeting = true;
+        this.setStatus('집중 공격: 공격할 타워를 클릭하세요. 우클릭 또는 Esc로 취소합니다.');
+        this.renderBattlefield();
       }
     });
 
@@ -401,14 +477,29 @@ export class BattlefieldScene extends Phaser.Scene {
       if (this.phase === 'attack-preparation') {
         this.addUnitToLane(2);
       } else if (this.phase === 'attack-combat') {
-        const towerId = this.attackCombat?.activateDisrupt() ?? null;
-        this.setStatus(
-          towerId === null
-            ? '교란할 타워가 범위에 없거나 재사용 대기 중입니다.'
-            : `교란 성공: ${towerId} 타워를 일시 무력화했습니다.`,
-          towerId === null,
-        );
+        if (this.attackCombat?.canIssueDisrupt !== true) {
+          this.setStatus('교란 재사용 대기 중입니다.', true);
+          return;
+        }
+        this.isFocusTargeting = false;
+        this.isDisruptTargeting = true;
+        this.setStatus('교란: 지휘관 반경 안에서 무력화할 타워를 클릭하세요.');
+        this.renderBattlefield();
       }
+    });
+
+    this.input.keyboard?.on('keydown-ESC', () => {
+      if (
+        this.phase !== 'attack-combat' ||
+        (!this.isFocusTargeting && !this.isDisruptTargeting)
+      ) {
+        return;
+      }
+      const cancelledAbility = this.isFocusTargeting ? '집중 공격' : '교란';
+      this.isFocusTargeting = false;
+      this.isDisruptTargeting = false;
+      this.setStatus(`${cancelledAbility} 대상 선택을 취소했습니다.`);
+      this.renderBattlefield();
     });
 
     this.input.keyboard?.on('keydown-C', () => {
@@ -425,14 +516,79 @@ export class BattlefieldScene extends Phaser.Scene {
       this.setStatus(
         removed === null
           ? '선택한 진입로의 대기열이 비어 있습니다.'
-          : '대기열의 마지막 유닛을 제거하고 재화를 돌려받았습니다.',
+          : `대기열의 마지막 유닛을 제거하고 출격 포인트 ${attackUnitCost(removed)}를 돌려받았습니다.`,
         removed === null,
       );
       this.updatePhaseInterface();
+      this.renderBattlefield();
+    });
+
+    this.input.keyboard?.on('keydown-X', () => {
+      if (this.phase !== 'attack-preparation' || this.squadPlan === null) return;
+      const refunded = this.squadPlan.clearUnits();
+      this.setStatus(
+        refunded === 0
+          ? '편성된 일반 유닛이 없습니다.'
+          : `전체 편성을 비우고 출격 포인트 ${refunded}를 전액 환급받았습니다.`,
+        refunded === 0,
+      );
+      this.updatePhaseInterface();
+      this.renderBattlefield();
+    });
+
+    this.input.keyboard?.on('keydown-P', () => {
+      if (this.phase !== 'attack-preparation') return;
+      this.squadPlan = createPrototypeSquadPlan(
+        this.roundSession.currentRound,
+        true,
+      );
+      this.selectedAttackLane = 1;
+      this.setStatus('현재 라운드의 추천 편성으로 초기화했습니다.');
+      this.updatePhaseInterface();
+      this.renderBattlefield();
     });
   }
 
+  private selectTower(towerArchetype: TowerArchetype): void {
+    if (this.phase !== 'preparation') return;
+    if (!isTowerAvailable(towerArchetype, this.roundSession.currentRound)) {
+      const unlockRound = towerArchetype === 'mortar' ? 2 : 3;
+      this.setStatus(`${TOWER_NAMES[towerArchetype]}은 ${unlockRound}라운드에 해금됩니다.`, true);
+      return;
+    }
+    this.activeKind = 'tower';
+    this.activeTowerArchetype = towerArchetype;
+    this.selectedStructureId = null;
+    this.setStatus(
+      `${TOWER_NAMES[towerArchetype]} 배치 모드: 부품 ${TOWER_CONSTRUCTION_COSTS[towerArchetype]}`,
+    );
+    this.renderBattlefield();
+  }
+
+  private selectAttackUnit(unitKind: AttackUnitKind): void {
+    if (this.phase !== 'attack-preparation') return;
+    if (!isUnitAvailable(unitKind, this.roundSession.currentRound)) {
+      const unlockRound = unitKind === 'swarm' ? 2 : 3;
+      this.setStatus(`${UNIT_NAMES[unitKind]}은 ${unlockRound}라운드에 해금됩니다.`, true);
+      return;
+    }
+    this.selectedAttackUnitKind = unitKind;
+    this.setStatus(
+      `${UNIT_NAMES[unitKind]} 선택: 출격 포인트 ${attackUnitCost(unitKind)}, Q/W/E로 진입로에 추가합니다.`,
+    );
+    this.updatePhaseInterface();
+    this.renderBattlefield();
+  }
+
   private handlePointerDown(pointer: Phaser.Input.Pointer): void {
+    if (this.phase === 'attack-combat' && this.isFocusTargeting) {
+      this.handleFocusTargetPointer(pointer);
+      return;
+    }
+    if (this.phase === 'attack-combat' && this.isDisruptTargeting) {
+      this.handleDisruptTargetPointer(pointer);
+      return;
+    }
     if (this.phase !== 'preparation') {
       return;
     }
@@ -450,11 +606,17 @@ export class BattlefieldScene extends Phaser.Scene {
         return;
       }
 
-      this.editor.sell(existing.id);
+      const sale = this.editor.sell(existing.id);
+      if (!sale.success) {
+        this.setStatus(this.failureMessage(sale.reason), true);
+        return;
+      }
       if (this.selectedStructureId === existing.id) {
         this.selectedStructureId = null;
       }
-      this.setStatus('시설을 판매했습니다. 해당 칸이 이동 경로로 열렸습니다.');
+      this.setStatus(
+        `시설을 판매하고 부품 ${sale.receipt.refund}을 전액 환급받았습니다.`,
+      );
       this.renderBattlefield();
       return;
     }
@@ -468,7 +630,11 @@ export class BattlefieldScene extends Phaser.Scene {
 
     const result =
       this.selectedStructureId === null
-        ? this.editor.place(this.activeKind, gridPosition)
+        ? this.editor.place(
+            this.activeKind,
+            gridPosition,
+            this.activeKind === 'tower' ? this.activeTowerArchetype : null,
+          )
         : this.editor.move(this.selectedStructureId, gridPosition);
 
     if (!result.success) {
@@ -478,7 +644,91 @@ export class BattlefieldScene extends Phaser.Scene {
     }
 
     this.selectedStructureId = null;
-    this.setStatus('설계를 변경하고 세 진입로의 경로를 다시 계산했습니다.');
+    this.setStatus(
+      `설계를 변경했습니다. 남은 건설 부품 ${this.editor.constructionFunds}.`,
+    );
+    this.renderBattlefield();
+  }
+
+  private handleFocusTargetPointer(pointer: Phaser.Input.Pointer): void {
+    if (pointer.rightButtonDown()) {
+      this.isFocusTargeting = false;
+      this.setStatus('집중 공격 대상 선택을 취소했습니다.');
+      this.renderBattlefield();
+      return;
+    }
+
+    const gridPosition = this.pointerToGrid(pointer);
+    if (gridPosition === null) {
+      this.setStatus('전장 안의 타워를 선택하세요.', true);
+      return;
+    }
+    const target = this.editor.battlefield.findStructureAt(gridPosition);
+    if (target === null || target.kind !== 'tower') {
+      this.setStatus('집중 공격은 타워에만 사용할 수 있습니다.', true);
+      return;
+    }
+
+    const result = this.attackCombat?.issueFocusFire(target.id);
+    if (result?.success === true) {
+      this.isFocusTargeting = false;
+      this.setStatus(
+        `집중 공격! 지휘관 주변 ${result.unitCount}명이 선택한 타워를 우선 공격합니다.`,
+      );
+      this.renderBattlefield();
+      return;
+    }
+
+    const message =
+      result?.reason === 'no-nearby-units'
+        ? '지휘관 주변에 명령을 받을 일반 유닛이 없습니다.'
+        : result?.reason === 'cooldown'
+          ? '집중 공격 재사용 대기 중입니다.'
+          : '선택한 타워에 집중 공격 명령을 내릴 수 없습니다.';
+    this.isFocusTargeting = false;
+    this.setStatus(message, true);
+    this.renderBattlefield();
+  }
+
+  private handleDisruptTargetPointer(pointer: Phaser.Input.Pointer): void {
+    if (pointer.rightButtonDown()) {
+      this.isDisruptTargeting = false;
+      this.setStatus('교란 대상 선택을 취소했습니다.');
+      this.renderBattlefield();
+      return;
+    }
+
+    const gridPosition = this.pointerToGrid(pointer);
+    if (gridPosition === null) {
+      this.setStatus('전장 안의 타워를 선택하세요.', true);
+      return;
+    }
+    const target = this.editor.battlefield.findStructureAt(gridPosition);
+    if (target === null || target.kind !== 'tower') {
+      this.setStatus('교란은 타워에만 사용할 수 있습니다.', true);
+      return;
+    }
+
+    const result = this.attackCombat?.issueDisrupt(target.id);
+    if (result?.success === true) {
+      this.isDisruptTargeting = false;
+      const towerName =
+        target.towerArchetype === null
+          ? '타워'
+          : TOWER_NAMES[target.towerArchetype];
+      this.setStatus(`교란 성공! ${towerName}의 공격과 대기시간을 정지했습니다.`);
+      this.renderBattlefield();
+      return;
+    }
+
+    const message =
+      result?.reason === 'out-of-range'
+        ? '선택한 타워가 지휘관의 교란 반경 밖에 있습니다.'
+        : result?.reason === 'cooldown'
+          ? '교란 재사용 대기 중입니다.'
+          : '선택한 타워를 교란할 수 없습니다.';
+    if (result?.reason === 'cooldown') this.isDisruptTargeting = false;
+    this.setStatus(message, true);
     this.renderBattlefield();
   }
 
@@ -502,10 +752,13 @@ export class BattlefieldScene extends Phaser.Scene {
         : this.editor.battlefield.structures.find(
             (structure) => structure.id === this.selectedStructureId,
           );
-    const kindName = this.activeKind === 'tower' ? '공격 타워' : '장애물';
+    const kindName =
+      this.activeKind === 'tower'
+        ? TOWER_NAMES[this.activeTowerArchetype]
+        : '블록 벽';
     if (this.phase === 'attack-preparation' && this.squadPlan !== null) {
       this.selectionText.setText(
-        `선택 유닛: ${this.selectedAttackUnitKind === 'tank' ? '탱커' : '원거리'}\n남은 공격 재화: ${this.squadPlan.remainingBudget}`,
+        `선택 유닛: ${UNIT_NAMES[this.selectedAttackUnitKind]}\n비용: ${attackUnitCost(this.selectedAttackUnitKind)} · 남은 출격 포인트: ${this.squadPlan.remainingSortiePoints}`,
       );
       return;
     }
@@ -514,8 +767,8 @@ export class BattlefieldScene extends Phaser.Scene {
       this.phase !== 'preparation'
         ? `전투 상태: ${this.phase === 'combat' || this.phase === 'attack-combat' ? '진행 중' : '종료'}\n남은 시설: ${this.editor.battlefield.structures.length}`
         : selected === undefined || selected === null
-        ? `현재 도구: ${kindName}\n시설 수: ${this.editor.battlefield.structures.length}`
-        : `선택: ${selected.kind === 'tower' ? '공격 타워' : '장애물'}\n체력: ${selected.health}/${selected.maxHealth}`,
+        ? `현재 도구: ${kindName}\n비용: ${this.editor.constructionCost(this.activeKind, this.activeKind === 'tower' ? this.activeTowerArchetype : null)} · 보유 부품: ${this.editor.constructionFunds}\n시설 수: ${this.editor.battlefield.structures.length}`
+        : `선택: ${selected.kind === 'tower' && selected.towerArchetype !== null ? `${TOWER_NAMES[selected.towerArchetype]} Lv.${selected.upgradeLevel}` : '블록 벽'}\n체력: ${selected.health}/${selected.maxHealth}\n${selected.kind === 'tower' ? `강화: ${this.editor.upgradeCost(selected) === null ? '최대 레벨' : `부품 ${this.editor.upgradeCost(selected)}`}` : '강화 불가'}\n판매 환급: ${this.editor.saleRefund(selected)} · 보유 부품: ${this.editor.constructionFunds}`,
     );
   }
 
@@ -588,13 +841,47 @@ export class BattlefieldScene extends Phaser.Scene {
     for (const structure of this.editor.battlefield.structures) {
       const center = this.gridCenter(structure.position);
       const isSelected = structure.id === this.selectedStructureId;
-      this.structureGraphics.fillStyle(STRUCTURE_COLORS[structure.kind], 1);
+      const isFocusTarget = structure.id === this.attackCombat?.focusTargetId;
+      const isFocusCandidate =
+        this.isFocusTargeting && structure.kind === 'tower';
+      const isDisruptCandidate =
+        this.isDisruptTargeting &&
+        structure.kind === 'tower' &&
+        this.attackCombat?.isTowerWithinDisruptRange(structure.id) === true;
 
-      if (structure.kind === 'tower') {
+      if (structure.kind === 'tower' && structure.towerArchetype !== null) {
+        this.structureGraphics.fillStyle(
+          TOWER_COLORS[structure.towerArchetype],
+          1,
+        );
+        if (structure.towerArchetype === 'mortar') {
+          this.structureGraphics.fillRoundedRect(
+            center.x - 16,
+            center.y - 16,
+            32,
+            32,
+            5,
+          );
+          this.structureGraphics.fillStyle(0x5c3028, 1);
+          this.structureGraphics.fillCircle(center.x, center.y, 8);
+        } else if (structure.towerArchetype === 'piercer') {
+          this.structureGraphics.fillTriangle(
+            center.x,
+            center.y - 19,
+            center.x - 18,
+            center.y + 16,
+            center.x + 18,
+            center.y + 16,
+          );
+          this.structureGraphics.fillStyle(0x29452c, 1);
+          this.structureGraphics.fillRect(center.x - 3, center.y - 24, 6, 24);
+        } else {
         this.structureGraphics.fillCircle(center.x, center.y, 15);
         this.structureGraphics.fillStyle(0x4a3a20, 1);
         this.structureGraphics.fillRect(center.x - 4, center.y - 22, 8, 15);
+        }
       } else {
+        this.structureGraphics.fillStyle(0xb8a1d9, 1);
         this.structureGraphics.fillRoundedRect(
           center.x - 17,
           center.y - 17,
@@ -614,12 +901,70 @@ export class BattlefieldScene extends Phaser.Scene {
         );
       }
 
+      if (structure.kind === 'tower' && structure.upgradeLevel > 1) {
+        this.structureGraphics.lineStyle(3, 0xffe082, 0.95);
+        this.structureGraphics.strokeCircle(center.x, center.y, 20);
+      }
+
+      if (isFocusCandidate || isFocusTarget) {
+        this.structureGraphics.lineStyle(
+          isFocusTarget ? 5 : 3,
+          isFocusTarget ? 0xff6b6b : 0x4de1c1,
+          isFocusTarget ? 1 : 0.8,
+        );
+        this.structureGraphics.strokeCircle(center.x, center.y, 25);
+        if (isFocusTarget) {
+          this.structureGraphics.lineBetween(
+            center.x - 18,
+            center.y - 18,
+            center.x + 18,
+            center.y + 18,
+          );
+          this.structureGraphics.lineBetween(
+            center.x + 18,
+            center.y - 18,
+            center.x - 18,
+            center.y + 18,
+          );
+        }
+      }
+
+      if (isDisruptCandidate) {
+        this.structureGraphics.lineStyle(4, 0x9d8cff, 0.95);
+        this.structureGraphics.strokeRect(
+          center.x - 24,
+          center.y - 24,
+          48,
+          48,
+        );
+      }
+
       if (
         structure.kind === 'tower' &&
         this.attackCombat?.isTowerDisabled(structure.id)
       ) {
         this.structureGraphics.lineStyle(4, 0x4de1c1, 1);
         this.structureGraphics.strokeCircle(center.x, center.y, 22);
+        this.structureGraphics.lineBetween(
+          center.x - 12,
+          center.y - 16,
+          center.x + 12,
+          center.y + 16,
+        );
+        const disruptRatio = Math.min(
+          1,
+          this.attackCombat.disruptRemainingMs(structure.id) /
+            this.attackCombat.config.disruptDurationMs,
+        );
+        this.structureGraphics.fillStyle(0x251f32, 1);
+        this.structureGraphics.fillRect(center.x - 18, center.y + 28, 36, 5);
+        this.structureGraphics.fillStyle(0x4de1c1, 1);
+        this.structureGraphics.fillRect(
+          center.x - 18,
+          center.y + 28,
+          36 * disruptRatio,
+          5,
+        );
       }
 
       if (this.phase === 'combat' || this.phase === 'attack-combat') {
@@ -654,10 +999,29 @@ export class BattlefieldScene extends Phaser.Scene {
       const y =
         GRID_OFFSET_Y + enemy.renderRow * GRID_CELL_SIZE + GRID_CELL_SIZE / 2;
 
-      this.enemyGraphics.fillStyle(0xff6b6b, 1);
-      this.enemyGraphics.fillTriangle(x - 13, y - 12, x - 13, y + 12, x + 14, y);
-      this.enemyGraphics.lineStyle(2, 0xffd6d6, 1);
-      this.enemyGraphics.strokeCircle(x, y, 15);
+      if (enemy.stats.archetype === 'tank') {
+        this.enemyGraphics.fillStyle(0xd95f76, 1);
+        this.enemyGraphics.fillRoundedRect(x - 16, y - 14, 32, 28, 7);
+        this.enemyGraphics.lineStyle(3, 0xffd6d6, 1);
+        this.enemyGraphics.strokeRect(x - 13, y - 11, 26, 22);
+      } else if (enemy.stats.archetype === 'swarm') {
+        this.enemyGraphics.fillStyle(0xffa85c, 1);
+        this.enemyGraphics.fillCircle(x - 7, y + 3, 8);
+        this.enemyGraphics.fillCircle(x + 7, y + 3, 8);
+        this.enemyGraphics.fillCircle(x, y - 7, 8);
+      } else {
+        this.enemyGraphics.fillStyle(0xe98bb5, 1);
+        this.enemyGraphics.fillTriangle(
+          x - 13,
+          y - 12,
+          x - 13,
+          y + 12,
+          x + 14,
+          y,
+        );
+        this.enemyGraphics.lineStyle(2, 0xffd6e8, 1);
+        this.enemyGraphics.strokeCircle(x, y, 15);
+      }
 
       this.enemyGraphics.fillStyle(0x251f32, 1);
       this.enemyGraphics.fillRect(x - 15, y - 21, 30, 4);
@@ -673,15 +1037,23 @@ export class BattlefieldScene extends Phaser.Scene {
     for (const unit of this.attackCombat.units) {
       const x = GRID_OFFSET_X + unit.renderColumn * GRID_CELL_SIZE + GRID_CELL_SIZE / 2;
       const y = GRID_OFFSET_Y + unit.renderRow * GRID_CELL_SIZE + GRID_CELL_SIZE / 2;
-      this.attackerGraphics.fillStyle(unit.kind === 'tank' ? 0x5da9e9 : 0xf4a6d7, 1);
+      this.attackerGraphics.fillStyle(UNIT_COLORS[unit.kind], 1);
       if (unit.kind === 'tank') {
         this.attackerGraphics.fillRoundedRect(x - 15, y - 14, 30, 28, 7);
+      } else if (unit.kind === 'swarm') {
+        this.attackerGraphics.fillCircle(x - 7, y + 3, 7);
+        this.attackerGraphics.fillCircle(x + 7, y + 3, 7);
+        this.attackerGraphics.fillCircle(x, y - 7, 7);
       } else {
         this.attackerGraphics.fillCircle(x, y, 12);
         this.attackerGraphics.lineStyle(3, 0xffe0f3, 1);
         this.attackerGraphics.strokeCircle(x, y, 12);
       }
       this.drawHealthBar(this.attackerGraphics, x, y - 20, unit.healthRatio, 30);
+      if (this.attackCombat.isUnitFocused(unit.id)) {
+        this.attackerGraphics.lineStyle(3, 0xff6b6b, 0.95);
+        this.attackerGraphics.strokeCircle(x, y, 19);
+      }
     }
 
     const commander = this.attackCombat.commander;
@@ -707,9 +1079,21 @@ export class BattlefieldScene extends Phaser.Scene {
       38,
     );
 
-    if (this.attackCombat.isRallyActive) {
+    if (this.isFocusTargeting) {
       this.attackerGraphics.lineStyle(3, 0x4de1c1, 0.7);
-      this.attackerGraphics.strokeCircle(center.x, center.y, GRID_CELL_SIZE * 2.2);
+      this.attackerGraphics.strokeCircle(
+        center.x,
+        center.y,
+        GRID_CELL_SIZE * this.attackCombat.config.focusFireCommandRadius,
+      );
+    }
+    if (this.isDisruptTargeting) {
+      this.attackerGraphics.lineStyle(3, 0x9d8cff, 0.8);
+      this.attackerGraphics.strokeCircle(
+        center.x,
+        center.y,
+        GRID_CELL_SIZE * this.attackCombat.config.disruptRange,
+      );
     }
   }
 
@@ -748,13 +1132,16 @@ export class BattlefieldScene extends Phaser.Scene {
     });
   }
 
-  private failureMessage(reason: BattlefieldFailureReason): string {
-    const messages: Readonly<Record<BattlefieldFailureReason, string>> = {
+  private failureMessage(reason: DefenseEditFailureReason): string {
+    const messages: Readonly<Record<DefenseEditFailureReason, string>> = {
       'outside-map': '전장 밖에는 시설을 배치할 수 없습니다.',
       'reserved-cell': '진입점과 코어 보호 구역에는 시설을 배치할 수 없습니다.',
       'occupied-cell': '이미 다른 시설이 있는 칸입니다.',
       'structure-not-found': '선택한 시설을 찾을 수 없습니다.',
       'path-blocked': '모든 진입점에 경로가 남아야 합니다. 완전한 길막은 허용되지 않습니다.',
+      'insufficient-funds': '건설 부품이 부족합니다. 시설을 판매하거나 다음 라운드 보상을 받으세요.',
+      'not-upgradable': '블록 벽은 업그레이드할 수 없습니다.',
+      'max-level': `이 타워는 이미 최대 ${MAX_TOWER_LEVEL}레벨입니다.`,
     };
     return messages[reason];
   }
@@ -794,12 +1181,12 @@ export class BattlefieldScene extends Phaser.Scene {
     this.resultText
       .setColor(won ? GAME_COLORS.secondary : '#ff7b8f')
       .setText(
-        `${this.roundSession.currentRound}라운드 ${won ? '방어 성공' : '방어 실패'}\n처치 ${this.combat.killCount} · 코어 ${this.combat.coreHealth}/${this.combat.config.coreMaxHealth}\n${won ? 'Enter: 공격 준비' : 'R: 설계 복원'}`,
+        `${this.roundSession.currentRound}라운드 ${won ? '방어 성공' : '방어 실패'}\n처치 ${this.combat.killCount} · 누수 ${this.combat.leakCount} · 코어 피해 ${this.combat.leakDamage}\n코어 ${this.combat.coreHealth}/${this.combat.config.coreMaxHealth}\n${won ? 'Enter: 공격 준비' : 'R: 설계 복원'}`,
       )
       .setVisible(true);
     this.setStatus(
       won
-        ? '웨이브를 모두 막았습니다. 저장된 설계는 다음 단계에서도 유지됩니다.'
+        ? '코어가 버텨냈습니다. 저장된 설계와 시설 체력은 공격 전에 복원됩니다.'
         : '코어가 파괴되었습니다. R 키를 누르면 전투 전 설계를 복원합니다.',
       !won,
     );
@@ -811,13 +1198,17 @@ export class BattlefieldScene extends Phaser.Scene {
     this.editor.restoreBlueprint();
     this.combat = null;
     this.attackCombat = null;
+    this.isFocusTargeting = false;
+    this.isDisruptTargeting = false;
     this.squadPlan = createPrototypeSquadPlan(this.roundSession.currentRound);
     this.phase = 'attack-preparation';
     this.attackPreparationRemainingMs = ATTACK_PREPARATION_DURATION_MS;
     this.selectedAttackLane = 1;
     this.selectedAttackUnitKind = 'tank';
     this.resultText.setVisible(false);
-    this.setStatus('공격 부대를 편성하세요. 자신이 만든 방어선을 그대로 상대합니다.');
+    this.setStatus(
+      '추천 부대가 배치되었습니다. 자신의 방어선에 맞게 출격 순서와 진입로를 바꾸세요.',
+    );
     this.updatePhaseInterface();
     this.renderBattlefield();
   }
@@ -829,7 +1220,7 @@ export class BattlefieldScene extends Phaser.Scene {
     this.setStatus(
       added
         ? `${laneIndex + 1}번 진입로 대기열에 유닛을 추가했습니다.`
-        : '공격 재화가 부족합니다.',
+        : '출격 포인트가 부족합니다.',
       !added,
     );
     this.updatePhaseInterface();
@@ -838,11 +1229,7 @@ export class BattlefieldScene extends Phaser.Scene {
 
   private startAttackCombat(): void {
     if (this.phase !== 'attack-preparation' || this.squadPlan === null) return;
-    const unitCount = this.squadPlan.lanes.reduce(
-      (total, lane) => total + lane.length,
-      0,
-    );
-    if (unitCount === 0) {
+    if (this.squadPlan.unitCount === 0) {
       this.setStatus('최소 한 명의 일반 유닛을 편성해야 합니다.', true);
       return;
     }
@@ -852,9 +1239,11 @@ export class BattlefieldScene extends Phaser.Scene {
       this.squadPlan,
       createPrototypeAttackCombatConfig(this.roundSession.currentRound),
     );
+    this.isFocusTargeting = false;
+    this.isDisruptTargeting = false;
     this.phase = 'attack-combat';
     this.resultText.setVisible(false);
-    this.setStatus('공격 시작! WASD로 지휘관을 이동하고 Q 집결, E 교란을 사용하세요.');
+    this.setStatus('공격 시작! WASD로 지휘관을 이동하고 Q 집중 공격, E 교란을 사용하세요.');
     this.updatePhaseInterface();
     this.renderBattlefield();
   }
@@ -877,6 +1266,8 @@ export class BattlefieldScene extends Phaser.Scene {
 
   private finishAttackCombat(): void {
     if (this.attackCombat === null || this.phase !== 'attack-combat') return;
+    this.isFocusTargeting = false;
+    this.isDisruptTargeting = false;
     this.phase = 'attack-result';
     const won = this.attackCombat.state === 'won';
     const completedRound = won
@@ -885,17 +1276,19 @@ export class BattlefieldScene extends Phaser.Scene {
     const failure =
       this.attackCombat.failureReason === 'commander-defeated'
         ? '지휘관 전투 불능'
-        : '제한시간 초과';
+        : this.attackCombat.failureReason === 'squad-defeated'
+          ? '일반 부대 전멸'
+          : '제한시간 초과';
     this.resultText
       .setColor(won ? GAME_COLORS.secondary : '#ff7b8f')
       .setText(
-        `${won ? `${this.roundSession.currentRound}라운드 완료` : '공격 실패'}\n${won ? `돌파 ${this.formatTime(completedRound?.attackTimeMs ?? 0)}` : failure}\n${won ? 'Enter: 계속' : 'R: 공격 준비 재시작'}`,
+        `${won ? `${this.roundSession.currentRound}라운드 완료` : '공격 실패 · 도전 종료'}\n${won ? `돌파 ${this.formatTime(completedRound?.attackTimeMs ?? 0)}` : failure}\n${won ? 'Enter: 계속' : 'R: 1라운드부터 다시 시작'}`,
       )
       .setVisible(true);
     this.setStatus(
       won
         ? `자신이 만든 방어선을 돌파했습니다. 누적 공격 시간 ${this.formatTime(this.roundSession.totalAttackTimeMs)}.`
-        : '지휘관이 쓰러지거나 제한시간이 끝나면 공격에 실패합니다.',
+        : '지휘관 사망, 제한시간 초과 또는 일반 부대 전멸로 현재 도전이 종료되었습니다.',
       !won,
     );
     this.updatePhaseInterface();
@@ -924,8 +1317,16 @@ export class BattlefieldScene extends Phaser.Scene {
     }
     this.roundSession.advanceToNextRound();
     this.resetToPreparation();
+    this.editor.grantConstructionFunds(ROUND_CONSTRUCTION_REWARD);
+    this.editor.saveBlueprint();
+    const unlockMessage =
+      this.roundSession.currentRound === 2
+        ? ' 블록 박격포와 태엽 군단이 해금되었습니다.'
+        : this.roundSession.currentRound === 3
+          ? ' 태엽 관통포와 고무줄 사수가 해금되었습니다.'
+          : '';
     this.setStatus(
-      `${this.roundSession.currentRound}라운드 시작. 이전 방어 설계를 이어서 재배치할 수 있습니다.`,
+      `${this.roundSession.currentRound}라운드 시작. 건설 부품 ${ROUND_CONSTRUCTION_REWARD}을 받아 총 ${this.editor.constructionFunds}입니다.${unlockMessage}`,
     );
   }
 
@@ -943,10 +1344,7 @@ export class BattlefieldScene extends Phaser.Scene {
   }
 
   private restartCampaign(): void {
-    this.roundSession = new RoundSession(5);
-    this.editor.restoreBlueprint();
-    this.resetToPreparation();
-    this.setStatus('새로운 5라운드 장난감 전쟁을 시작합니다.');
+    this.scene.restart();
   }
 
   private formatTime(milliseconds: number): string {
@@ -971,7 +1369,9 @@ export class BattlefieldScene extends Phaser.Scene {
       this.phaseText.setText(
         `${this.roundSession.currentRound}/${this.roundSession.normalRoundCount}R 방어 준비 ${Math.ceil(this.preparationRemainingMs / 1000)}초`,
       );
-      this.combatInfoText.setText('Space: 즉시 시작');
+      this.combatInfoText.setText(
+        `건설 부품: ${this.editor.constructionFunds}\n승리 보상: +${ROUND_CONSTRUCTION_REWARD}\nSpace: 즉시 시작`,
+      );
       this.helpText.setText(this.defenseHelpText());
       return;
     }
@@ -982,7 +1382,7 @@ export class BattlefieldScene extends Phaser.Scene {
       );
       this.combatInfoText.setText(
         [
-          `재화: ${this.squadPlan.remainingBudget}/${this.squadPlan.totalBudget}`,
+          `출격 포인트: ${this.squadPlan.remainingSortiePoints}/${this.squadPlan.totalSortiePoints}`,
           `대기열: ${this.squadPlan.lanes.map((lane) => lane.length).join(' / ')}`,
           `지휘관: ${this.squadPlan.commanderLane + 1}번 진입로`,
         ].join('\n'),
@@ -995,6 +1395,13 @@ export class BattlefieldScene extends Phaser.Scene {
       (this.phase === 'attack-combat' || this.phase === 'attack-result') &&
       this.attackCombat !== null
     ) {
+      const activeDisruption = this.attackCombat.activeDisruptions[0];
+      const disruptStatus =
+        activeDisruption !== undefined
+          ? `작동 ${Math.ceil(activeDisruption.remainingMs / 1000)}초`
+          : this.attackCombat.disruptCooldownRemainingMs > 0
+            ? `재사용 ${Math.ceil(this.attackCombat.disruptCooldownRemainingMs / 1000)}초`
+            : '준비';
       this.phaseText.setText(
         `${this.roundSession.currentRound}/${this.roundSession.normalRoundCount}R ${this.phase === 'attack-combat' ? '공격 전투' : '공격 종료'}`,
       );
@@ -1003,6 +1410,8 @@ export class BattlefieldScene extends Phaser.Scene {
           `적 코어: ${this.attackCombat.coreHealth}/${this.attackCombat.config.coreMaxHealth}`,
           `지휘관: ${this.attackCombat.commander.health}/${this.attackCombat.commander.maxHealth}`,
           `부대: ${this.attackCombat.units.length} (+${this.attackCombat.remainingSpawnCount})`,
+          `집중 명령: ${this.attackCombat.focusedUnitCount}명`,
+          `교란: ${disruptStatus}`,
           `시간: ${Math.ceil(this.attackCombat.remainingTimeMs / 1000)}초`,
         ].join('\n'),
       );
@@ -1022,6 +1431,7 @@ export class BattlefieldScene extends Phaser.Scene {
         `코어: ${this.combat.coreHealth}/${this.combat.config.coreMaxHealth}`,
         `적: ${this.combat.enemies.length} (+${this.combat.remainingSpawnCount})`,
         `처치: ${this.combat.killCount}`,
+        `누수: ${this.combat.leakCount} · 피해 ${this.combat.leakDamage}`,
       ].join('\n'),
     );
     this.helpText.setText(this.defenseHelpText());
@@ -1029,10 +1439,14 @@ export class BattlefieldScene extends Phaser.Scene {
 
   private defenseHelpText(): string {
     return [
-      '[1] 공격 타워  [2] 장애물',
+      `[1] 팝건 ${TOWER_CONSTRUCTION_COSTS.popgun} → 사수`,
+      `[2] 박격포 ${TOWER_CONSTRUCTION_COSTS.mortar} → 군단 (2R)`,
+      `[3] 관통포 ${TOWER_CONSTRUCTION_COSTS.piercer} → 방패병 (3R)`,
+      `[4] 블록 벽 ${OBSTACLE_CONSTRUCTION_COST}`,
       '왼쪽 클릭: 배치 / 선택 / 이동',
-      '오른쪽 클릭: 시설 판매',
-      '[Delete] 선택 시설 파괴',
+      '오른쪽 클릭: 판매 (전액 환급)',
+      '[Delete] 파괴 (환급 없음)',
+      `[U] 선택 타워 강화 (최대 Lv.${MAX_TOWER_LEVEL})`,
       '[S] 설계 저장  [R] 복원',
       '[Space] 방어전 시작',
       '',
@@ -1043,24 +1457,29 @@ export class BattlefieldScene extends Phaser.Scene {
 
   private attackPreparationHelpText(): string {
     return [
-      '[1] 탱커  [2] 원거리',
+      `[1] 방패병 ${attackUnitCost('tank')} → 팝건`,
+      `[2] 태엽 군단 ${attackUnitCost('swarm')} → 관통포 (2R)`,
+      `[3] 고무줄 사수 ${attackUnitCost('ranger')} → 박격포 (3R)`,
       '[Q/W/E] 상/중/하 진입로 추가',
       '[Backspace] 선택 진입로 제거',
+      '[X] 전체 비우기  [P] 추천 편성',
       '[C] 지휘관 진입로 변경',
       '[Space] 공격 시작',
       '',
-      '진입로별 처음 2명은 동시에',
-      '나머지는 대기열에서 출격합니다.',
+      `진입로별 처음 ${SIMULTANEOUS_CAPACITY_PER_LANE}명은 동시에`,
+      `나머지는 ${SQUAD_SPAWN_INTERVAL_MS / 1000}초 간격 출격합니다.`,
     ].join('\n');
   }
 
   private attackCombatHelpText(): string {
     return [
       '[W/A/S/D] 지휘관 이동',
-      '[Q] 집결',
-      '  부대를 지휘관 주변으로 유도',
+      '[Q] 집중 공격',
+      '  타워 클릭 → 주변 부대 목표 고정',
+      '  우클릭/Esc → 대상 선택 취소',
       '[E] 교란',
-      '  가까운 타워 일시 무력화',
+      '  반경 안 타워 클릭 → 완전 정지',
+      '  우클릭/Esc → 대상 선택 취소',
       '',
       '일반 유닛은 자동으로 이동하고',
       '시설과 코어를 공격합니다.',

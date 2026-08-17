@@ -1,6 +1,13 @@
 import type { Battlefield } from '../battlefield/Battlefield';
 import type { GridPosition } from '../grid/GridPosition';
 import type { DefenseStructure } from '../structures/DefenseStructure';
+import type { TowerUpgradePolicy } from '../structures/TowerUpgradePolicy';
+import {
+  towerDamageMultiplier,
+  unitDamageMultiplier,
+  type TowerArchetype,
+} from './CombatArchetype';
+import type { CoreLeakDamagePolicy } from './CoreLeakDamagePolicy';
 import { DefenseEnemy } from './DefenseEnemy';
 import type { DefenseWave } from './DefenseWave';
 
@@ -10,11 +17,14 @@ export interface TowerCombatStats {
   readonly rangeInCells: number;
   readonly damage: number;
   readonly attackIntervalMs: number;
+  readonly splashRadiusInCells: number;
 }
 
 export interface DefenseCombatConfig {
   readonly coreMaxHealth: number;
-  readonly tower: TowerCombatStats;
+  readonly coreLeakDamagePolicy: CoreLeakDamagePolicy;
+  readonly towerUpgradePolicy: TowerUpgradePolicy;
+  readonly towers: Readonly<Record<TowerArchetype, TowerCombatStats>>;
 }
 
 export class DefenseCombat {
@@ -26,6 +36,8 @@ export class DefenseCombat {
   private currentCoreHealth: number;
   private currentState: DefenseCombatState = 'running';
   private defeatedEnemies = 0;
+  private breachedEnemies = 0;
+  private appliedCoreLeakDamage = 0;
 
   public constructor(
     public readonly battlefield: Battlefield,
@@ -34,9 +46,13 @@ export class DefenseCombat {
   ) {
     if (
       config.coreMaxHealth <= 0 ||
-      config.tower.rangeInCells <= 0 ||
-      config.tower.damage <= 0 ||
-      config.tower.attackIntervalMs <= 0
+      Object.values(config.towers).some(
+        (tower) =>
+          tower.rangeInCells <= 0 ||
+          tower.damage <= 0 ||
+          tower.attackIntervalMs <= 0 ||
+          tower.splashRadiusInCells < 0,
+      )
     ) {
       throw new Error('Defense combat configuration values must be positive.');
     }
@@ -62,6 +78,14 @@ export class DefenseCombat {
 
   public get killCount(): number {
     return this.defeatedEnemies;
+  }
+
+  public get leakCount(): number {
+    return this.breachedEnemies;
+  }
+
+  public get leakDamage(): number {
+    return this.appliedCoreLeakDamage;
   }
 
   public get remainingSpawnCount(): number {
@@ -122,6 +146,9 @@ export class DefenseCombat {
     for (const tower of this.battlefield.structures.filter(
       (structure) => structure.kind === 'tower',
     )) {
+      const towerArchetype = tower.towerArchetype;
+      if (towerArchetype === null) continue;
+      const towerStats = this.config.towers[towerArchetype];
       const remainingCooldown = Math.max(
         0,
         (this.towerCooldowns.get(tower.id) ?? 0) - deltaMs,
@@ -132,17 +159,38 @@ export class DefenseCombat {
         continue;
       }
 
-      const target = this.nearestEnemyInRange(tower);
+      const target = this.nearestEnemyInRange(tower, towerStats);
       if (target === null) {
         continue;
       }
 
-      target.takeDamage(this.config.tower.damage);
-      this.towerCooldowns.set(tower.id, this.config.tower.attackIntervalMs);
+      const affectedEnemies =
+        towerStats.splashRadiusInCells === 0
+          ? [target]
+          : this.enemies.filter(
+              (enemy) =>
+                this.distanceBetweenCoordinates(
+                  enemy.renderColumn,
+                  enemy.renderRow,
+                  target.renderColumn,
+                  target.renderRow,
+                ) <= towerStats.splashRadiusInCells,
+            );
+      for (const enemy of affectedEnemies) {
+        enemy.takeDamage(
+          towerStats.damage *
+            this.config.towerUpgradePolicy.damageMultiplier(tower) *
+            towerDamageMultiplier(towerArchetype, enemy.stats.archetype),
+        );
+      }
+      this.towerCooldowns.set(tower.id, towerStats.attackIntervalMs);
     }
   }
 
-  private nearestEnemyInRange(tower: DefenseStructure): DefenseEnemy | null {
+  private nearestEnemyInRange(
+    tower: DefenseStructure,
+    towerStats: TowerCombatStats,
+  ): DefenseEnemy | null {
     let nearest: DefenseEnemy | null = null;
     let nearestDistance = Number.POSITIVE_INFINITY;
 
@@ -153,7 +201,7 @@ export class DefenseCombat {
         enemy.renderRow,
       );
       if (
-        distance <= this.config.tower.rangeInCells &&
+        distance <= towerStats.rangeInCells &&
         distance < nearestDistance
       ) {
         nearest = enemy;
@@ -168,14 +216,17 @@ export class DefenseCombat {
     for (const enemy of this.enemies) {
       enemy.updateCooldown(deltaMs);
 
-      const adjacentStructure = this.adjacentStructureTo(enemy.position);
-      if (adjacentStructure !== null) {
-        this.attackStructure(enemy, adjacentStructure);
+      if (enemy.position.equals(this.battlefield.map.corePosition)) {
+        this.resolveCoreBreach(enemy);
         continue;
       }
 
-      if (enemy.position.equals(this.battlefield.map.corePosition)) {
-        this.attackCore(enemy);
+      const structureTarget = this.nearestStructureInRange(
+        enemy.position,
+        enemy.stats.attackRange,
+      );
+      if (structureTarget !== null) {
+        this.attackStructure(enemy, structureTarget);
         continue;
       }
 
@@ -196,7 +247,10 @@ export class DefenseCombat {
       return;
     }
 
-    structure.takeDamage(enemy.stats.attackDamage);
+    structure.takeDamage(
+      enemy.stats.attackDamage *
+        unitDamageMultiplier(enemy.stats.archetype, structure.towerArchetype),
+    );
     enemy.consumeAttack();
     if (structure.health === 0) {
       this.battlefield.destroy(structure.id);
@@ -204,27 +258,36 @@ export class DefenseCombat {
     }
   }
 
-  private attackCore(enemy: DefenseEnemy): void {
+  private resolveCoreBreach(enemy: DefenseEnemy): void {
     enemy.cancelMovement();
-    if (!enemy.canAttack()) {
-      return;
-    }
-
+    const configuredDamage = this.config.coreLeakDamagePolicy.damageForCost(
+      enemy.stats.cost,
+    );
+    const appliedDamage = Math.min(this.currentCoreHealth, configuredDamage);
     this.currentCoreHealth = Math.max(
       0,
-      this.currentCoreHealth - enemy.stats.attackDamage,
+      this.currentCoreHealth - configuredDamage,
     );
-    enemy.consumeAttack();
+    this.appliedCoreLeakDamage += appliedDamage;
+    this.breachedEnemies += 1;
+    this.enemiesById.delete(enemy.id);
   }
 
-  private adjacentStructureTo(position: GridPosition): DefenseStructure | null {
+  private nearestStructureInRange(
+    position: GridPosition,
+    range: number,
+  ): DefenseStructure | null {
     return (
-      this.battlefield.structures.find(
-        (structure) =>
-          Math.abs(structure.position.column - position.column) +
-            Math.abs(structure.position.row - position.row) ===
-          1,
-      ) ?? null
+      [...this.battlefield.structures]
+        .filter(
+          (structure) =>
+            this.distanceBetweenPositions(position, structure.position) <= range,
+        )
+        .sort(
+          (left, right) =>
+            this.distanceBetweenPositions(position, left.position) -
+            this.distanceBetweenPositions(position, right.position),
+        )[0] ?? null
     );
   }
 
@@ -262,5 +325,26 @@ export class DefenseCombat {
       left.column - rightColumn,
       left.row - rightRow,
     );
+  }
+
+  private distanceBetweenPositions(
+    left: GridPosition,
+    right: GridPosition,
+  ): number {
+    return this.distanceBetweenCoordinates(
+      left.column,
+      left.row,
+      right.column,
+      right.row,
+    );
+  }
+
+  private distanceBetweenCoordinates(
+    leftColumn: number,
+    leftRow: number,
+    rightColumn: number,
+    rightRow: number,
+  ): number {
+    return Math.hypot(leftColumn - rightColumn, leftRow - rightRow);
   }
 }

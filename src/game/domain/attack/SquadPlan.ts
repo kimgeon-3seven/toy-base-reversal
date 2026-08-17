@@ -1,9 +1,7 @@
-export type AttackUnitKind = 'tank' | 'ranger';
+import type { UnitArchetype } from '../combat/CombatArchetype';
+import { unitCost } from '../combat/UnitEconomy';
 
-const UNIT_COSTS: Readonly<Record<AttackUnitKind, number>> = {
-  tank: 4,
-  ranger: 3,
-};
+export type AttackUnitKind = UnitArchetype;
 
 export class SquadPlan {
   private readonly laneQueues: AttackUnitKind[][];
@@ -14,8 +12,14 @@ export class SquadPlan {
     public readonly totalBudget: number,
     public readonly simultaneousCapacityPerLane: number,
     laneCount = 3,
+    public readonly spawnIntervalMs = 900,
   ) {
-    if (totalBudget <= 0 || simultaneousCapacityPerLane <= 0 || laneCount <= 0) {
+    if (
+      totalBudget <= 0 ||
+      simultaneousCapacityPerLane <= 0 ||
+      laneCount <= 0 ||
+      spawnIntervalMs <= 0
+    ) {
       throw new Error('Squad plan values must be positive.');
     }
     this.laneQueues = Array.from({ length: laneCount }, () => []);
@@ -24,6 +28,18 @@ export class SquadPlan {
 
   public get remainingBudget(): number {
     return this.totalBudget - this.spentBudget;
+  }
+
+  public get totalSortiePoints(): number {
+    return this.totalBudget;
+  }
+
+  public get remainingSortiePoints(): number {
+    return this.remainingBudget;
+  }
+
+  public get unitCount(): number {
+    return this.laneQueues.reduce((total, lane) => total + lane.length, 0);
   }
 
   public get commanderLane(): number {
@@ -36,7 +52,7 @@ export class SquadPlan {
 
   public addUnit(laneIndex: number, kind: AttackUnitKind): boolean {
     const lane = this.laneQueues[laneIndex];
-    const cost = UNIT_COSTS[kind];
+    const cost = unitCost(kind);
     if (lane === undefined || cost > this.remainingBudget) {
       return false;
     }
@@ -53,8 +69,15 @@ export class SquadPlan {
       return null;
     }
 
-    this.spentBudget -= UNIT_COSTS[removed];
+    this.spentBudget -= unitCost(removed);
     return removed;
+  }
+
+  public clearUnits(): number {
+    const refundedPoints = this.spentBudget;
+    for (const lane of this.laneQueues) lane.splice(0, lane.length);
+    this.spentBudget = 0;
+    return refundedPoints;
   }
 
   public setCommanderLane(laneIndex: number): boolean {
@@ -65,7 +88,9 @@ export class SquadPlan {
     return true;
   }
 
-  public buildSpawnSchedule(intervalMs = 900): readonly SquadSpawn[] {
+  public buildSpawnSchedule(
+    intervalMs = this.spawnIntervalMs,
+  ): readonly SquadSpawn[] {
     return this.laneQueues
       .flatMap((lane, laneIndex) =>
         lane.map((kind, queueIndex) => ({
@@ -93,5 +118,5 @@ export interface SquadSpawn {
 }
 
 export function attackUnitCost(kind: AttackUnitKind): number {
-  return UNIT_COSTS[kind];
+  return unitCost(kind);
 }

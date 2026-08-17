@@ -7,8 +7,14 @@ export class BreadthFirstPathfinder implements Pathfinder {
     map: GridMap,
     start: GridPosition,
     blockedPositionKeys: ReadonlySet<string>,
+    destination: GridPosition = map.corePosition,
   ): readonly GridPosition[] | null {
-    if (!map.contains(start) || blockedPositionKeys.has(start.key)) {
+    if (
+      !map.contains(start) ||
+      !map.contains(destination) ||
+      blockedPositionKeys.has(start.key) ||
+      blockedPositionKeys.has(destination.key)
+    ) {
       return null;
     }
 
@@ -25,7 +31,7 @@ export class BreadthFirstPathfinder implements Pathfinder {
         break;
       }
 
-      if (current.equals(map.corePosition)) {
+      if (current.equals(destination)) {
         return this.reconstructPath(current, cameFrom);
       }
 

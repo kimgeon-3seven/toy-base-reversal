@@ -1,10 +1,14 @@
 import type { GridPosition } from '../grid/GridPosition';
+import type { UnitArchetype } from './CombatArchetype';
 
 export interface DefenseEnemyStats {
+  readonly cost: number;
   readonly maxHealth: number;
   readonly movementSpeed: number;
   readonly attackDamage: number;
   readonly attackIntervalMs: number;
+  readonly attackRange: number;
+  readonly archetype: UnitArchetype;
 }
 
 export class DefenseEnemy {
@@ -21,9 +25,12 @@ export class DefenseEnemy {
   ) {
     if (
       stats.maxHealth <= 0 ||
+      !Number.isInteger(stats.cost) ||
+      stats.cost <= 0 ||
       stats.movementSpeed <= 0 ||
       stats.attackDamage <= 0 ||
-      stats.attackIntervalMs <= 0
+      stats.attackIntervalMs <= 0 ||
+      stats.attackRange <= 0
     ) {
       throw new Error('Enemy statistics must be positive.');
     }

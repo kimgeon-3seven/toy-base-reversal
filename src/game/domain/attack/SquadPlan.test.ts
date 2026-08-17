@@ -24,4 +24,18 @@ describe('SquadPlan', () => {
 
     expect(schedule.map((spawn) => spawn.delayMs)).toEqual([0, 120, 900]);
   });
+
+  it('uses the configured queue interval and refunds every unit when cleared', () => {
+    const plan = new SquadPlan(12, 2, 1, 750);
+    plan.addUnit(0, 'tank');
+    plan.addUnit(0, 'ranger');
+    plan.addUnit(0, 'swarm');
+
+    expect(plan.buildSpawnSchedule().map((spawn) => spawn.delayMs)).toEqual([
+      0, 120, 750,
+    ]);
+    expect(plan.clearUnits()).toBe(9);
+    expect(plan.remainingSortiePoints).toBe(12);
+    expect(plan.unitCount).toBe(0);
+  });
 });

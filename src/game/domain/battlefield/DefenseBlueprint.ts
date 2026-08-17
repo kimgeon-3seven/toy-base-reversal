@@ -3,6 +3,7 @@ import {
   DefenseStructure,
   type StructureKind,
 } from '../structures/DefenseStructure';
+import type { TowerArchetype } from '../combat/CombatArchetype';
 
 interface StructureSnapshot {
   readonly id: string;
@@ -10,6 +11,8 @@ interface StructureSnapshot {
   readonly column: number;
   readonly row: number;
   readonly maxHealth: number;
+  readonly towerArchetype: TowerArchetype | null;
+  readonly upgradeLevel: number;
 }
 
 export class DefenseBlueprint {
@@ -25,6 +28,8 @@ export class DefenseBlueprint {
         column: structure.position.column,
         row: structure.position.row,
         maxHealth: structure.maxHealth,
+        towerArchetype: structure.towerArchetype,
+        upgradeLevel: structure.upgradeLevel,
       })),
     );
   }
@@ -37,6 +42,8 @@ export class DefenseBlueprint {
           snapshot.kind,
           new GridPosition(snapshot.column, snapshot.row),
           snapshot.maxHealth,
+          snapshot.towerArchetype,
+          snapshot.upgradeLevel,
         ),
     );
   }

@@ -6,5 +6,6 @@ export interface Pathfinder {
     map: GridMap,
     start: GridPosition,
     blockedPositionKeys: ReadonlySet<string>,
+    destination?: GridPosition,
   ): readonly GridPosition[] | null;
 }

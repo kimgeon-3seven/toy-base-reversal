@@ -89,4 +89,24 @@ describe('Battlefield', () => {
     expect(restored?.health).toBe(100);
     expect(restored?.id).toBe('saved');
   });
+
+  it('preserves a tower archetype in a saved blueprint', () => {
+    const battlefield = createNarrowBattlefield();
+    const mortar = new DefenseStructure(
+      'mortar',
+      'tower',
+      new GridPosition(2, 1),
+      115,
+      'mortar',
+    );
+    battlefield.place(mortar);
+    const blueprint = battlefield.captureBlueprint();
+
+    battlefield.destroy('mortar');
+    battlefield.restoreBlueprint(blueprint);
+
+    expect(
+      battlefield.findStructureAt(new GridPosition(2, 1))?.towerArchetype,
+    ).toBe('mortar');
+  });
 });

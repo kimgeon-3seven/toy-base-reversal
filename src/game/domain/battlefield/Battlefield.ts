@@ -93,6 +93,28 @@ export class Battlefield {
     );
   }
 
+  public findPathToAdjacent(
+    position: GridPosition,
+    target: GridPosition,
+  ): readonly GridPosition[] | null {
+    const blockedKeys = this.blockedPositionKeys();
+    const candidatePaths = this.map
+      .neighborsOf(target)
+      .filter((neighbor) => !blockedKeys.has(neighbor.key))
+      .map((destination) =>
+        this.pathfinder.findPath(
+          this.map,
+          position,
+          blockedKeys,
+          destination,
+        ),
+      )
+      .filter((path): path is readonly GridPosition[] => path !== null)
+      .sort((left, right) => left.length - right.length);
+
+    return candidatePaths[0] ?? null;
+  }
+
   public walkableNeighborsOf(position: GridPosition): readonly GridPosition[] {
     return this.map
       .neighborsOf(position)

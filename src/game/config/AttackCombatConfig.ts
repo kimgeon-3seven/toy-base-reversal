@@ -1,11 +1,30 @@
 import type { AttackCombatConfig } from '../domain/attack/AttackCombat';
-import { SquadPlan } from '../domain/attack/SquadPlan';
+import { createPrototypeTowerUpgradePolicy } from './TowerUpgradeConfig';
 
 export const ATTACK_PREPARATION_DURATION_MS = 30_000;
+
+export const NORMAL_MODE_CORE_HEALTH_BY_ROUND = [
+  650,
+  650,
+  1_500,
+  1_600,
+  2_900,
+] as const;
+
+export const NORMAL_MODE_ATTACK_TIME_TARGETS_MS = [
+  { minimum: 25_000, maximum: 40_000 },
+  { minimum: 30_000, maximum: 50_000 },
+  { minimum: 40_000, maximum: 60_000 },
+  { minimum: 50_000, maximum: 70_000 },
+  { minimum: 60_000, maximum: 85_000 },
+] as const;
+
+const CHALLENGE_CORE_HEALTH_PER_ROUND = 350;
 
 export const PROTOTYPE_ATTACK_COMBAT_CONFIG: AttackCombatConfig = {
   coreMaxHealth: 170,
   timeLimitMs: 90_000,
+  towerUpgradePolicy: createPrototypeTowerUpgradePolicy(),
   unitStats: {
     tank: {
       maxHealth: 125,
@@ -13,6 +32,13 @@ export const PROTOTYPE_ATTACK_COMBAT_CONFIG: AttackCombatConfig = {
       attackDamage: 19,
       attackRange: 1.15,
       attackIntervalMs: 720,
+    },
+    swarm: {
+      maxHealth: 38,
+      movementSpeed: 2.05,
+      attackDamage: 8,
+      attackRange: 1.1,
+      attackIntervalMs: 440,
     },
     ranger: {
       maxHealth: 62,
@@ -22,10 +48,25 @@ export const PROTOTYPE_ATTACK_COMBAT_CONFIG: AttackCombatConfig = {
       attackIntervalMs: 610,
     },
   },
-  tower: {
-    rangeInCells: 3.15,
-    damage: 12,
-    attackIntervalMs: 560,
+  towers: {
+    popgun: {
+      rangeInCells: 3.35,
+      damage: 8,
+      attackIntervalMs: 340,
+      splashRadiusInCells: 0,
+    },
+    mortar: {
+      rangeInCells: 3.85,
+      damage: 18,
+      attackIntervalMs: 1_080,
+      splashRadiusInCells: 1.25,
+    },
+    piercer: {
+      rangeInCells: 4.1,
+      damage: 30,
+      attackIntervalMs: 1_450,
+      splashRadiusInCells: 0,
+    },
   },
   commander: {
     maxHealth: 145,
@@ -33,8 +74,8 @@ export const PROTOTYPE_ATTACK_COMBAT_CONFIG: AttackCombatConfig = {
     attackRange: 2.4,
     attackIntervalMs: 650,
   },
-  rallyDurationMs: 2_400,
-  rallyCooldownMs: 7_000,
+  focusFireCommandRadius: 3,
+  focusFireCooldownMs: 7_000,
   disruptDurationMs: 3_200,
   disruptCooldownMs: 6_500,
   disruptRange: 4.2,
@@ -44,32 +85,48 @@ export function createPrototypeAttackCombatConfig(
   roundNumber = 1,
 ): AttackCombatConfig {
   const difficultyStep = Math.max(0, roundNumber - 1);
+  const normalRoundIndex = Math.min(
+    difficultyStep,
+    NORMAL_MODE_CORE_HEALTH_BY_ROUND.length - 1,
+  );
+  const normalRoundCoreHealth =
+    NORMAL_MODE_CORE_HEALTH_BY_ROUND[
+      normalRoundIndex
+    ];
+  const challengeDifficultyStep = Math.max(
+    0,
+    difficultyStep - normalRoundIndex,
+  );
   return {
     ...PROTOTYPE_ATTACK_COMBAT_CONFIG,
     coreMaxHealth:
-      PROTOTYPE_ATTACK_COMBAT_CONFIG.coreMaxHealth + difficultyStep * 8,
+      (normalRoundCoreHealth ?? PROTOTYPE_ATTACK_COMBAT_CONFIG.coreMaxHealth) +
+      challengeDifficultyStep * CHALLENGE_CORE_HEALTH_PER_ROUND,
     unitStats: {
       tank: { ...PROTOTYPE_ATTACK_COMBAT_CONFIG.unitStats.tank },
+      swarm: { ...PROTOTYPE_ATTACK_COMBAT_CONFIG.unitStats.swarm },
       ranger: { ...PROTOTYPE_ATTACK_COMBAT_CONFIG.unitStats.ranger },
     },
-    tower: {
-      ...PROTOTYPE_ATTACK_COMBAT_CONFIG.tower,
-      damage:
-        PROTOTYPE_ATTACK_COMBAT_CONFIG.tower.damage +
-        Math.floor(difficultyStep / 2),
+    towers: {
+      popgun: {
+        ...PROTOTYPE_ATTACK_COMBAT_CONFIG.towers.popgun,
+        damage:
+          PROTOTYPE_ATTACK_COMBAT_CONFIG.towers.popgun.damage +
+          Math.floor(difficultyStep / 2),
+      },
+      mortar: {
+        ...PROTOTYPE_ATTACK_COMBAT_CONFIG.towers.mortar,
+        damage:
+          PROTOTYPE_ATTACK_COMBAT_CONFIG.towers.mortar.damage +
+          Math.floor(difficultyStep / 2),
+      },
+      piercer: {
+        ...PROTOTYPE_ATTACK_COMBAT_CONFIG.towers.piercer,
+        damage:
+          PROTOTYPE_ATTACK_COMBAT_CONFIG.towers.piercer.damage +
+          Math.floor(difficultyStep / 2),
+      },
     },
     commander: { ...PROTOTYPE_ATTACK_COMBAT_CONFIG.commander },
   };
-}
-
-export function createPrototypeSquadPlan(roundNumber = 1): SquadPlan {
-  const attackBudget = 24 + Math.max(0, roundNumber - 1) * 3;
-  const plan = new SquadPlan(attackBudget, 2);
-  plan.addUnit(0, 'tank');
-  plan.addUnit(0, 'ranger');
-  plan.addUnit(1, 'tank');
-  plan.addUnit(2, 'tank');
-  plan.addUnit(2, 'ranger');
-  plan.setCommanderLane(1);
-  return plan;
 }
