@@ -20,4 +20,10 @@ describe('AttackSquadConfig', () => {
     plan.clearUnits();
     expect(plan.remainingSortiePoints).toBe(plan.totalSortiePoints);
   });
+
+  it('grows more slowly in challenge mode and caps browser load', () => {
+    expect([5, 6, 7, 10, 11, 20].map(sortiePointsForRound)).toEqual([
+      36, 38, 40, 46, 48, 48,
+    ]);
+  });
 });

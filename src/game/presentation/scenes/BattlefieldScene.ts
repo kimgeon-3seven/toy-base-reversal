@@ -41,6 +41,7 @@ import {
   createPrototypeTowerUpgradePolicy,
   MAX_TOWER_LEVEL,
 } from '../../config/TowerUpgradeConfig';
+import { NORMAL_MODE_ROUND_COUNT } from '../../config/ChallengeModeConfig';
 import { Battlefield } from '../../domain/battlefield/Battlefield';
 import type { DefenseEditFailureReason } from '../../application/DefenseEditResult';
 import { AttackCombat } from '../../domain/attack/AttackCombat';
@@ -100,7 +101,7 @@ export class BattlefieldScene extends Phaser.Scene {
   private squadPlan: SquadPlan | null = null;
   private attackCombat: AttackCombat | null = null;
   private attackPreparationRemainingMs = ATTACK_PREPARATION_DURATION_MS;
-  private roundSession = new RoundSession(5);
+  private roundSession = new RoundSession(NORMAL_MODE_ROUND_COUNT);
   private selectedAttackLane = 1;
   private selectedAttackUnitKind: AttackUnitKind = 'tank';
   private isFocusTargeting = false;
@@ -117,7 +118,7 @@ export class BattlefieldScene extends Phaser.Scene {
   }
 
   public create(): void {
-    this.roundSession = new RoundSession(5);
+    this.roundSession = new RoundSession(NORMAL_MODE_ROUND_COUNT);
     const battlefield = new Battlefield(
       createBattlefieldMap(),
       new BreadthFirstPathfinder(),
@@ -379,7 +380,14 @@ export class BattlefieldScene extends Phaser.Scene {
         return;
       }
       if (this.phase === 'result') {
-        this.resetToPreparation();
+        if (
+          this.roundSession.isChallengeMode &&
+          this.combat?.state === 'lost'
+        ) {
+          this.restartCampaign();
+        } else {
+          this.resetToPreparation();
+        }
         return;
       }
 
@@ -449,6 +457,8 @@ export class BattlefieldScene extends Phaser.Scene {
         this.attackCombat?.state === 'won'
       ) {
         this.continueAfterAttackVictory();
+      } else if (this.phase === 'campaign-complete') {
+        this.startChallengeMode();
       }
     });
 
@@ -1181,13 +1191,15 @@ export class BattlefieldScene extends Phaser.Scene {
     this.resultText
       .setColor(won ? GAME_COLORS.secondary : '#ff7b8f')
       .setText(
-        `${this.roundSession.currentRound}라운드 ${won ? '방어 성공' : '방어 실패'}\n처치 ${this.combat.killCount} · 누수 ${this.combat.leakCount} · 코어 피해 ${this.combat.leakDamage}\n코어 ${this.combat.coreHealth}/${this.combat.config.coreMaxHealth}\n${won ? 'Enter: 공격 준비' : 'R: 설계 복원'}`,
+        `${this.roundName()} ${won ? '방어 성공' : '방어 실패'}\n처치 ${this.combat.killCount} · 누수 ${this.combat.leakCount} · 코어 피해 ${this.combat.leakDamage}\n코어 ${this.combat.coreHealth}/${this.combat.config.coreMaxHealth}\n${won ? 'Enter: 공격 준비' : this.roundSession.isChallengeMode ? '도전 종료 · R: 처음부터 다시 시작' : 'R: 설계 복원'}`,
       )
       .setVisible(true);
     this.setStatus(
       won
         ? '코어가 버텨냈습니다. 저장된 설계와 시설 체력은 공격 전에 복원됩니다.'
-        : '코어가 파괴되었습니다. R 키를 누르면 전투 전 설계를 복원합니다.',
+        : this.roundSession.isChallengeMode
+          ? `코어가 파괴되어 챌린지가 종료되었습니다. ${this.challengeRecordText()}`
+          : '코어가 파괴되었습니다. R 키를 누르면 전투 전 설계를 복원합니다.',
       !won,
     );
     this.updatePhaseInterface();
@@ -1282,12 +1294,14 @@ export class BattlefieldScene extends Phaser.Scene {
     this.resultText
       .setColor(won ? GAME_COLORS.secondary : '#ff7b8f')
       .setText(
-        `${won ? `${this.roundSession.currentRound}라운드 완료` : '공격 실패 · 도전 종료'}\n${won ? `돌파 ${this.formatTime(completedRound?.attackTimeMs ?? 0)}` : failure}\n${won ? 'Enter: 계속' : 'R: 1라운드부터 다시 시작'}`,
+        `${won ? `${this.roundName()} 완료` : '공격 실패 · 도전 종료'}\n${won ? `돌파 ${this.formatTime(completedRound?.attackTimeMs ?? 0)}` : failure}\n${!won && this.roundSession.isChallengeMode ? `${this.challengeRecordText()}\n` : ''}${won ? 'Enter: 계속' : 'R: 1라운드부터 다시 시작'}`,
       )
       .setVisible(true);
     this.setStatus(
       won
-        ? `자신이 만든 방어선을 돌파했습니다. 누적 공격 시간 ${this.formatTime(this.roundSession.totalAttackTimeMs)}.`
+        ? this.roundSession.isChallengeMode
+          ? `${this.roundName()}을 돌파했습니다. ${this.challengeRecordText()}`
+          : `자신이 만든 방어선을 돌파했습니다. 누적 공격 시간 ${this.formatTime(this.roundSession.totalAttackTimeMs)}.`
         : '지휘관 사망, 제한시간 초과 또는 일반 부대 전멸로 현재 도전이 종료되었습니다.',
       !won,
     );
@@ -1311,11 +1325,26 @@ export class BattlefieldScene extends Phaser.Scene {
     if (this.phase !== 'attack-result' || this.attackCombat?.state !== 'won') {
       return;
     }
-    if (this.roundSession.isNormalModeComplete) {
+    if (
+      this.roundSession.isNormalModeComplete &&
+      !this.roundSession.isChallengeMode
+    ) {
       this.showCampaignComplete();
       return;
     }
     this.roundSession.advanceToNextRound();
+    this.beginAdvancedRound();
+  }
+
+  private startChallengeMode(): void {
+    if (this.phase !== 'campaign-complete') return;
+    if (!this.roundSession.enterChallengeMode()) return;
+    this.beginAdvancedRound(
+      '아이가 없는 방에서 장난감들이 스스로 움직입니다. 챌린지 전쟁이 시작됩니다.',
+    );
+  }
+
+  private beginAdvancedRound(introduction?: string): void {
     this.resetToPreparation();
     this.editor.grantConstructionFunds(ROUND_CONSTRUCTION_REWARD);
     this.editor.saveBlueprint();
@@ -1326,7 +1355,7 @@ export class BattlefieldScene extends Phaser.Scene {
           ? ' 태엽 관통포와 고무줄 사수가 해금되었습니다.'
           : '';
     this.setStatus(
-      `${this.roundSession.currentRound}라운드 시작. 건설 부품 ${ROUND_CONSTRUCTION_REWARD}을 받아 총 ${this.editor.constructionFunds}입니다.${unlockMessage}`,
+      `${introduction ?? `${this.roundName()} 시작.`} 건설 부품 ${ROUND_CONSTRUCTION_REWARD}을 받아 총 ${this.editor.constructionFunds}입니다.${unlockMessage}`,
     );
   }
 
@@ -1335,7 +1364,7 @@ export class BattlefieldScene extends Phaser.Scene {
     this.resultText
       .setColor(GAME_COLORS.secondary)
       .setText(
-        `일반 모드 완료\n5라운드 누적 ${this.formatTime(this.roundSession.totalAttackTimeMs)}\n아이가 없는 동안, 장난감들의 전쟁은 계속된다.\n\n챌린지 모드 · 다음 단계에서 개방\nR: 처음부터 다시 시작`,
+        `일반 모드 완료\n5라운드 누적 ${this.formatTime(this.roundSession.totalAttackTimeMs)}\n부모님: "밥 먹자!"\n아이가 방을 나가자 장난감들이 스스로 움직이기 시작한다.\n\nEnter: 챌린지 모드 시작\nR: 처음부터 다시 시작`,
       )
       .setVisible(true);
     this.setStatus('부모님의 식사 호출에 아이가 방을 나갑니다. 장난감들이 스스로 움직이기 시작합니다.');
@@ -1361,16 +1390,23 @@ export class BattlefieldScene extends Phaser.Scene {
           '다음: 챌린지 모드',
         ].join('\n'),
       );
-      this.helpText.setText('[R] 일반 모드 다시 시작');
+      this.helpText.setText('[Enter] 챌린지 시작\n[R] 일반 모드 다시 시작');
       return;
     }
 
     if (this.phase === 'preparation') {
       this.phaseText.setText(
-        `${this.roundSession.currentRound}/${this.roundSession.normalRoundCount}R 방어 준비 ${Math.ceil(this.preparationRemainingMs / 1000)}초`,
+        `${this.roundLabel()} 방어 준비 ${Math.ceil(this.preparationRemainingMs / 1000)}초`,
       );
       this.combatInfoText.setText(
-        `건설 부품: ${this.editor.constructionFunds}\n승리 보상: +${ROUND_CONSTRUCTION_REWARD}\nSpace: 즉시 시작`,
+        [
+          `건설 부품: ${this.editor.constructionFunds}`,
+          `승리 보상: +${ROUND_CONSTRUCTION_REWARD}`,
+          ...(this.roundSession.isChallengeMode
+            ? [this.challengeRecordText()]
+            : []),
+          'Space: 즉시 시작',
+        ].join('\n'),
       );
       this.helpText.setText(this.defenseHelpText());
       return;
@@ -1378,13 +1414,16 @@ export class BattlefieldScene extends Phaser.Scene {
 
     if (this.phase === 'attack-preparation' && this.squadPlan !== null) {
       this.phaseText.setText(
-        `${this.roundSession.currentRound}/${this.roundSession.normalRoundCount}R 공격 준비 ${Math.ceil(this.attackPreparationRemainingMs / 1000)}초`,
+        `${this.roundLabel()} 공격 준비 ${Math.ceil(this.attackPreparationRemainingMs / 1000)}초`,
       );
       this.combatInfoText.setText(
         [
           `출격 포인트: ${this.squadPlan.remainingSortiePoints}/${this.squadPlan.totalSortiePoints}`,
           `대기열: ${this.squadPlan.lanes.map((lane) => lane.length).join(' / ')}`,
           `지휘관: ${this.squadPlan.commanderLane + 1}번 진입로`,
+          ...(this.roundSession.isChallengeMode
+            ? [this.challengeRecordText()]
+            : []),
         ].join('\n'),
       );
       this.helpText.setText(this.attackPreparationHelpText());
@@ -1403,7 +1442,7 @@ export class BattlefieldScene extends Phaser.Scene {
             ? `재사용 ${Math.ceil(this.attackCombat.disruptCooldownRemainingMs / 1000)}초`
             : '준비';
       this.phaseText.setText(
-        `${this.roundSession.currentRound}/${this.roundSession.normalRoundCount}R ${this.phase === 'attack-combat' ? '공격 전투' : '공격 종료'}`,
+        `${this.roundLabel()} ${this.phase === 'attack-combat' ? '공격 전투' : '공격 종료'}`,
       );
       this.combatInfoText.setText(
         [
@@ -1413,6 +1452,9 @@ export class BattlefieldScene extends Phaser.Scene {
           `집중 명령: ${this.attackCombat.focusedUnitCount}명`,
           `교란: ${disruptStatus}`,
           `시간: ${Math.ceil(this.attackCombat.remainingTimeMs / 1000)}초`,
+          ...(this.roundSession.isChallengeMode
+            ? [this.challengeRecordText()]
+            : []),
         ].join('\n'),
       );
       this.helpText.setText(this.attackCombatHelpText());
@@ -1424,7 +1466,7 @@ export class BattlefieldScene extends Phaser.Scene {
     }
 
     this.phaseText.setText(
-      `${this.roundSession.currentRound}/${this.roundSession.normalRoundCount}R ${this.phase === 'combat' ? '방어 전투' : '방어 종료'}`,
+      `${this.roundLabel()} ${this.phase === 'combat' ? '방어 전투' : '방어 종료'}`,
     );
     this.combatInfoText.setText(
       [
@@ -1432,9 +1474,29 @@ export class BattlefieldScene extends Phaser.Scene {
         `적: ${this.combat.enemies.length} (+${this.combat.remainingSpawnCount})`,
         `처치: ${this.combat.killCount}`,
         `누수: ${this.combat.leakCount} · 피해 ${this.combat.leakDamage}`,
+        ...(this.roundSession.isChallengeMode
+          ? [this.challengeRecordText()]
+          : []),
       ].join('\n'),
     );
     this.helpText.setText(this.defenseHelpText());
+  }
+
+  private roundLabel(): string {
+    return this.roundSession.isChallengeMode
+      ? `챌린지 ${this.roundSession.challengeRound}R`
+      : `${this.roundSession.currentRound}/${this.roundSession.normalRoundCount}R`;
+  }
+
+  private roundName(): string {
+    return this.roundSession.isChallengeMode
+      ? `챌린지 ${this.roundSession.challengeRound}라운드`
+      : `${this.roundSession.currentRound}라운드`;
+  }
+
+  private challengeRecordText(): string {
+    const lastTime = this.roundSession.latestChallengeAttackTimeMs;
+    return `최고 완료 ${this.roundSession.highestCompletedChallengeRound}R${lastTime === null ? '' : ` · 최근 돌파 ${this.formatTime(lastTime)}`}`;
   }
 
   private defenseHelpText(): string {

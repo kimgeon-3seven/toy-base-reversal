@@ -3,7 +3,10 @@ import {
   createPrototypeAttackCombatConfig,
 } from './AttackCombatConfig';
 import { createPrototypeSquadPlan } from './AttackSquadConfig';
-import { createPrototypeDefenseWave } from './DefenseCombatConfig';
+import {
+  createPrototypeDefenseWave,
+  defenseWaveCountForRound,
+} from './DefenseCombatConfig';
 
 describe('prototype round progression', () => {
   it('increases defense wave pressure across normal rounds', () => {
@@ -26,6 +29,30 @@ describe('prototype round progression', () => {
     expect(fifthCombat.coreMaxHealth).toBeGreaterThan(firstCombat.coreMaxHealth);
     expect(fifthCombat.towers.popgun.damage).toBeGreaterThan(
       firstCombat.towers.popgun.damage,
+    );
+  });
+
+  it('applies the approved capped challenge-mode pressure curve', () => {
+    const fifthWave = createPrototypeDefenseWave(5);
+    const sixthWave = createPrototypeDefenseWave(6);
+    const twentiethWave = createPrototypeDefenseWave(20);
+
+    expect([5, 6, 7, 10, 11, 20].map(defenseWaveCountForRound)).toEqual([
+      7, 8, 9, 12, 12, 12,
+    ]);
+    expect(sixthWave.spawns[0]?.stats.maxHealth).toBeGreaterThan(
+      fifthWave.spawns[0]?.stats.maxHealth ?? 0,
+    );
+    expect(twentiethWave.spawns[0]?.stats.attackDamage).toBeGreaterThan(
+      sixthWave.spawns[0]?.stats.attackDamage ?? 0,
+    );
+  });
+
+  it('caps challenge sortie points while core durability keeps growing', () => {
+    expect(createPrototypeSquadPlan(20).totalBudget).toBe(48);
+    expect(createPrototypeAttackCombatConfig(7).coreMaxHealth).toBe(3_600);
+    expect(createPrototypeAttackCombatConfig(20).coreMaxHealth).toBeGreaterThan(
+      createPrototypeAttackCombatConfig(7).coreMaxHealth,
     );
   });
 });

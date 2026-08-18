@@ -1,4 +1,8 @@
 import type { AttackCombatConfig } from '../domain/attack/AttackCombat';
+import {
+  challengeRoundFor,
+  CHALLENGE_CORE_HEALTH_PER_ROUND,
+} from './ChallengeModeConfig';
 import { createPrototypeTowerUpgradePolicy } from './TowerUpgradeConfig';
 
 export const ATTACK_PREPARATION_DURATION_MS = 30_000;
@@ -18,8 +22,6 @@ export const NORMAL_MODE_ATTACK_TIME_TARGETS_MS = [
   { minimum: 50_000, maximum: 70_000 },
   { minimum: 60_000, maximum: 85_000 },
 ] as const;
-
-const CHALLENGE_CORE_HEALTH_PER_ROUND = 350;
 
 export const PROTOTYPE_ATTACK_COMBAT_CONFIG: AttackCombatConfig = {
   coreMaxHealth: 170,
@@ -93,10 +95,7 @@ export function createPrototypeAttackCombatConfig(
     NORMAL_MODE_CORE_HEALTH_BY_ROUND[
       normalRoundIndex
     ];
-  const challengeDifficultyStep = Math.max(
-    0,
-    difficultyStep - normalRoundIndex,
-  );
+  const challengeDifficultyStep = challengeRoundFor(roundNumber);
   return {
     ...PROTOTYPE_ATTACK_COMBAT_CONFIG,
     coreMaxHealth:

@@ -4,8 +4,13 @@ import {
   type UnitAvailabilityPolicy,
 } from '../application/SquadPlanFactory';
 import type { AttackUnitKind, SquadPlan } from '../domain/attack/SquadPlan';
-import { LinearSortiePointPolicy } from '../domain/attack/SortiePointPolicy';
+import { StagedCappedSortiePointPolicy } from '../domain/attack/SortiePointPolicy';
 import { availableUnitArchetypes } from './ContentConfig';
+import {
+  CHALLENGE_MAX_SORTIE_POINTS,
+  CHALLENGE_SORTIE_POINTS_PER_ROUND,
+  NORMAL_MODE_ROUND_COUNT,
+} from './ChallengeModeConfig';
 
 export const STARTING_SORTIE_POINTS = 24;
 export const SORTIE_POINTS_PER_ROUND = 3;
@@ -19,9 +24,12 @@ class PrototypeUnitAvailability implements UnitAvailabilityPolicy {
   }
 }
 
-const prototypeSortiePointPolicy = new LinearSortiePointPolicy(
+const prototypeSortiePointPolicy = new StagedCappedSortiePointPolicy(
   STARTING_SORTIE_POINTS,
   SORTIE_POINTS_PER_ROUND,
+  NORMAL_MODE_ROUND_COUNT,
+  CHALLENGE_SORTIE_POINTS_PER_ROUND,
+  CHALLENGE_MAX_SORTIE_POINTS,
 );
 
 const prototypeSquadPlanFactory = new SquadPlanFactory(

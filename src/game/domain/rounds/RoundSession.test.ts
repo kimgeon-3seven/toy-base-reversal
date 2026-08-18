@@ -45,4 +45,43 @@ describe('RoundSession', () => {
       'Defense must be completed',
     );
   });
+
+  it('enters challenge mode explicitly and then advances without a round cap', () => {
+    const session = new RoundSession(2);
+    for (let round = 1; round <= 2; round += 1) {
+      session.recordDefenseVictory({
+        defeatedEnemies: 10,
+        remainingCoreHealth: 60,
+      });
+      session.recordAttackVictory(round * 10_000);
+      if (round < 2) session.advanceToNextRound();
+    }
+
+    expect(session.mode).toBe('normal');
+    expect(session.challengeRound).toBe(0);
+    expect(session.enterChallengeMode()).toBe(true);
+    expect(session.mode).toBe('challenge');
+    expect(session.currentRound).toBe(3);
+    expect(session.challengeRound).toBe(1);
+
+    session.recordDefenseVictory({
+      defeatedEnemies: 20,
+      remainingCoreHealth: 40,
+    });
+    session.recordAttackVictory(55_000);
+
+    expect(session.completedChallengeRounds).toHaveLength(1);
+    expect(session.highestCompletedChallengeRound).toBe(1);
+    expect(session.latestChallengeAttackTimeMs).toBe(55_000);
+    expect(session.advanceToNextRound()).toBe(true);
+    expect(session.challengeRound).toBe(2);
+  });
+
+  it('rejects challenge entry before normal mode is complete', () => {
+    const session = new RoundSession();
+
+    expect(() => session.enterChallengeMode()).toThrow(
+      'Normal mode must be completed',
+    );
+  });
 });

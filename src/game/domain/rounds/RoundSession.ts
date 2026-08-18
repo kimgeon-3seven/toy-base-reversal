@@ -9,6 +9,8 @@ export interface RoundResult {
   readonly attackTimeMs: number;
 }
 
+export type GameMode = 'normal' | 'challenge';
+
 export class RoundSession {
   private currentRoundNumber = 1;
   private pendingDefenseResult: DefenseRoundResult | null = null;
@@ -24,6 +26,20 @@ export class RoundSession {
     return this.currentRoundNumber;
   }
 
+  public get mode(): GameMode {
+    return this.isChallengeMode ? 'challenge' : 'normal';
+  }
+
+  public get isChallengeMode(): boolean {
+    return this.currentRoundNumber > this.normalRoundCount;
+  }
+
+  public get challengeRound(): number {
+    return this.isChallengeMode
+      ? this.currentRoundNumber - this.normalRoundCount
+      : 0;
+  }
+
   public get completedRounds(): readonly RoundResult[] {
     return [...this.completedRoundResults];
   }
@@ -37,7 +53,24 @@ export class RoundSession {
   }
 
   public get isNormalModeComplete(): boolean {
-    return this.completedRoundResults.length === this.normalRoundCount;
+    return this.completedRoundResults.length >= this.normalRoundCount;
+  }
+
+  public get completedChallengeRounds(): readonly RoundResult[] {
+    return this.completedRoundResults.filter(
+      (result) => result.roundNumber > this.normalRoundCount,
+    );
+  }
+
+  public get highestCompletedChallengeRound(): number {
+    const latestChallengeResult = this.completedChallengeRounds.at(-1);
+    return latestChallengeResult === undefined
+      ? 0
+      : latestChallengeResult.roundNumber - this.normalRoundCount;
+  }
+
+  public get latestChallengeAttackTimeMs(): number | null {
+    return this.completedChallengeRounds.at(-1)?.attackTimeMs ?? null;
   }
 
   public get totalAttackTimeMs(): number {
@@ -48,8 +81,8 @@ export class RoundSession {
   }
 
   public recordDefenseVictory(result: DefenseRoundResult): void {
-    if (this.isNormalModeComplete) {
-      throw new Error('Normal mode is already complete.');
+    if (this.isNormalModeComplete && !this.isChallengeMode) {
+      throw new Error('Challenge mode must begin before recording more rounds.');
     }
     if (result.defeatedEnemies < 0 || result.remainingCoreHealth <= 0) {
       throw new Error('A defense victory requires valid surviving-core results.');
@@ -82,9 +115,22 @@ export class RoundSession {
     if (this.latestResult?.roundNumber !== this.currentRoundNumber) {
       throw new Error('The current round must be completed before advancing.');
     }
-    if (this.isNormalModeComplete) {
+    if (this.isNormalModeComplete && !this.isChallengeMode) {
       return false;
     }
+    this.currentRoundNumber += 1;
+    return true;
+  }
+
+  public enterChallengeMode(): boolean {
+    if (!this.isNormalModeComplete) {
+      throw new Error('Normal mode must be completed before challenge mode.');
+    }
+    if (this.isChallengeMode) return false;
+    if (this.latestResult?.roundNumber !== this.currentRoundNumber) {
+      throw new Error('The final normal round must be completed first.');
+    }
+
     this.currentRoundNumber += 1;
     return true;
   }

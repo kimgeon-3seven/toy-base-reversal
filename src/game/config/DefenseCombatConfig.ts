@@ -5,6 +5,13 @@ import type { UnitArchetype } from '../domain/combat/CombatArchetype';
 import { TieredCoreLeakDamagePolicy } from '../domain/combat/CoreLeakDamagePolicy';
 import { unitCost } from '../domain/combat/UnitEconomy';
 import { availableUnitArchetypes } from './ContentConfig';
+import {
+  challengeRoundFor,
+  CHALLENGE_ENEMY_DAMAGE_BONUS_PER_ROUND,
+  CHALLENGE_ENEMY_HEALTH_BONUS_PER_ROUND,
+  CHALLENGE_MAX_WAVE_COUNT,
+  CHALLENGE_STARTING_WAVE_COUNT,
+} from './ChallengeModeConfig';
 import { createPrototypeTowerUpgradePolicy } from './TowerUpgradeConfig';
 
 export const PREPARATION_DURATION_MS = 30_000;
@@ -87,14 +94,19 @@ export function createPrototypeDefenseCombatConfig(): DefenseCombatConfig {
 
 export function createPrototypeDefenseWave(roundNumber = 1): DefenseWave {
   const difficultyStep = Math.max(0, roundNumber - 1);
-  const normalRoundIndex = Math.min(
-    difficultyStep,
-    NORMAL_MODE_WAVE_COUNT_BY_ROUND.length - 1,
-  );
-  const normalRoundWaveCount =
-    NORMAL_MODE_WAVE_COUNT_BY_ROUND[normalRoundIndex] ?? 3;
-  const waveCount =
-    normalRoundWaveCount + Math.max(0, difficultyStep - normalRoundIndex);
+  const challengeRound = challengeRoundFor(roundNumber);
+  const waveCount = defenseWaveCountForRound(roundNumber);
+  const finalNormalDifficultyStep = NORMAL_MODE_WAVE_COUNT_BY_ROUND.length - 1;
+  const healthBonus =
+    Math.min(difficultyStep, finalNormalDifficultyStep) *
+      ENEMY_HEALTH_BONUS_PER_ROUND +
+    challengeRound * CHALLENGE_ENEMY_HEALTH_BONUS_PER_ROUND;
+  const damageBonus =
+    Math.floor(
+      Math.min(difficultyStep, finalNormalDifficultyStep) /
+        ENEMY_DAMAGE_BONUS_INTERVAL_ROUNDS,
+    ) +
+    challengeRound * CHALLENGE_ENEMY_DAMAGE_BONUS_PER_ROUND;
   const availableArchetypes = availableUnitArchetypes(roundNumber);
   const spawns = [];
   for (let waveIndex = 0; waveIndex < waveCount; waveIndex += 1) {
@@ -111,14 +123,8 @@ export function createPrototypeDefenseWave(roundNumber = 1): DefenseWave {
           entryIndex,
           stats: {
             ...baseStats,
-            maxHealth:
-              baseStats.maxHealth +
-              difficultyStep * ENEMY_HEALTH_BONUS_PER_ROUND,
-            attackDamage:
-              baseStats.attackDamage +
-              Math.floor(
-                difficultyStep / ENEMY_DAMAGE_BONUS_INTERVAL_ROUNDS,
-              ),
+            maxHealth: baseStats.maxHealth + healthBonus,
+            attackDamage: baseStats.attackDamage + damageBonus,
           },
         });
       }
@@ -126,4 +132,17 @@ export function createPrototypeDefenseWave(roundNumber = 1): DefenseWave {
   }
 
   return new DefenseWave(spawns);
+}
+
+export function defenseWaveCountForRound(roundNumber: number): number {
+  const challengeRound = challengeRoundFor(roundNumber);
+  if (challengeRound > 0) {
+    return Math.min(
+      CHALLENGE_MAX_WAVE_COUNT,
+      CHALLENGE_STARTING_WAVE_COUNT + challengeRound - 1,
+    );
+  }
+
+  return NORMAL_MODE_WAVE_COUNT_BY_ROUND[roundNumber - 1] ??
+    NORMAL_MODE_WAVE_COUNT_BY_ROUND[0];
 }
