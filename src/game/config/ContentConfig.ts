@@ -15,6 +15,30 @@ export const UNIT_NAMES: Readonly<Record<UnitArchetype, string>> = {
   ranger: '고무줄 사수',
 };
 
+export const TOWER_COUNTER_TARGETS: Readonly<
+  Record<TowerArchetype, UnitArchetype>
+> = {
+  popgun: 'ranger',
+  mortar: 'swarm',
+  piercer: 'tank',
+};
+
+export const UNIT_COUNTER_TARGETS: Readonly<
+  Record<UnitArchetype, TowerArchetype>
+> = {
+  tank: 'popgun',
+  swarm: 'piercer',
+  ranger: 'mortar',
+};
+
+export function towerCounterSummary(tower: TowerArchetype): string {
+  return `${TOWER_NAMES[tower]} → ${UNIT_NAMES[TOWER_COUNTER_TARGETS[tower]]}`;
+}
+
+export function unitCounterSummary(unit: UnitArchetype): string {
+  return `${UNIT_NAMES[unit]} → ${TOWER_NAMES[UNIT_COUNTER_TARGETS[unit]]}`;
+}
+
 export function availableTowerArchetypes(
   roundNumber: number,
 ): readonly TowerArchetype[] {
