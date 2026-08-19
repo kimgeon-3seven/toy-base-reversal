@@ -1,8 +1,10 @@
 import Phaser from 'phaser';
+import { GameRecordService } from '../../application/GameRecordService';
 import { GAME_HEIGHT, GAME_WIDTH } from '../../config/GameConfig';
 import type { GameRuntime } from '../../ports/GameRuntime';
 import { BootScene } from '../../presentation/scenes/BootScene';
 import { BattlefieldScene } from '../../presentation/scenes/BattlefieldScene';
+import { LocalStoragePlayerRecordRepository } from '../storage/LocalStoragePlayerRecordRepository';
 
 export class PhaserGameRuntime implements GameRuntime {
   private game: Phaser.Game | null = null;
@@ -14,6 +16,9 @@ export class PhaserGameRuntime implements GameRuntime {
       return;
     }
 
+    const recordService = new GameRecordService(
+      new LocalStoragePlayerRecordRepository(window.localStorage),
+    );
     this.game = new Phaser.Game({
       type: Phaser.AUTO,
       parent: this.parentId,
@@ -29,7 +34,7 @@ export class PhaserGameRuntime implements GameRuntime {
         mode: Phaser.Scale.FIT,
         autoCenter: Phaser.Scale.CENTER_BOTH,
       },
-      scene: [BootScene, BattlefieldScene],
+      scene: [BootScene, new BattlefieldScene(recordService)],
     });
   }
 }

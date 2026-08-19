@@ -1,5 +1,6 @@
 import Phaser from 'phaser';
 import { DefenseEditor } from '../../application/DefenseEditor';
+import type { GameRecordService } from '../../application/GameRecordService';
 import type { TutorialSequence } from '../../application/TutorialSequence';
 import {
   CORE_POSITION,
@@ -59,6 +60,7 @@ import type { TowerArchetype } from '../../domain/combat/CombatArchetype';
 import { GridPosition } from '../../domain/grid/GridPosition';
 import { BreadthFirstPathfinder } from '../../domain/pathfinding/BreadthFirstPathfinder';
 import { RoundSession } from '../../domain/rounds/RoundSession';
+import type { PlayerRecord } from '../../domain/records/PlayerRecord';
 import type { StructureKind } from '../../domain/structures/DefenseStructure';
 
 const TOWER_COLORS: Readonly<Record<TowerArchetype, number>> = {
@@ -100,9 +102,13 @@ export class BattlefieldScene extends Phaser.Scene {
   private tutorial!: TutorialSequence;
   private tutorialOverlay!: Phaser.GameObjects.Container;
   private tutorialProgressText!: Phaser.GameObjects.Text;
+  private tutorialRecordText!: Phaser.GameObjects.Text;
   private tutorialTitleText!: Phaser.GameObjects.Text;
   private tutorialBodyText!: Phaser.GameObjects.Text;
   private tutorialObjectiveText!: Phaser.GameObjects.Text;
+  private playerRecord!: PlayerRecord;
+  private recordResetArmedUntil = 0;
+  private latestRecordNotice = '';
   private activeKind: StructureKind = 'tower';
   private activeTowerArchetype: TowerArchetype = 'popgun';
   private selectedStructureId: string | null = null;
@@ -124,12 +130,15 @@ export class BattlefieldScene extends Phaser.Scene {
     right: Phaser.Input.Keyboard.Key;
   };
 
-  public constructor() {
+  public constructor(private readonly gameRecordService: GameRecordService) {
     super({ key: 'BattlefieldScene' });
   }
 
   public create(): void {
     this.roundSession = new RoundSession(NORMAL_MODE_ROUND_COUNT);
+    this.playerRecord = this.gameRecordService.record;
+    this.recordResetArmedUntil = 0;
+    this.latestRecordNotice = '';
     this.tutorial = createPrototypeTutorial();
     this.phase = 'tutorial';
     this.preparationRemainingMs = PREPARATION_DURATION_MS;
@@ -360,6 +369,15 @@ export class BattlefieldScene extends Phaser.Scene {
         fontSize: '18px',
         fontStyle: 'bold',
       });
+    this.tutorialRecordText = this.add
+      .text(330, -205, '', {
+        align: 'right',
+        color: '#d9d3e8',
+        fontFamily: 'Arial, sans-serif',
+        fontSize: '15px',
+        lineSpacing: 3,
+      })
+      .setOrigin(1, 0);
     this.tutorialTitleText = this.add
       .text(0, -150, '', {
         align: 'center',
@@ -393,12 +411,17 @@ export class BattlefieldScene extends Phaser.Scene {
       })
       .setOrigin(0.5, 0);
     const controlText = this.add
-      .text(0, 212, '[Enter] 다음    [Esc] 안내 건너뛰기', {
+      .text(
+        0,
+        212,
+        '[Enter] 다음    [Esc] 안내 건너뛰기    [L] 기록 초기화(두 번)',
+        {
         align: 'center',
         color: '#d9d3e8',
         fontFamily: 'Arial, sans-serif',
         fontSize: '17px',
-      })
+        },
+      )
       .setOrigin(0.5);
 
     this.tutorialOverlay = this.add
@@ -406,6 +429,7 @@ export class BattlefieldScene extends Phaser.Scene {
         backdrop,
         panel,
         this.tutorialProgressText,
+        this.tutorialRecordText,
         this.tutorialTitleText,
         this.tutorialBodyText,
         this.tutorialObjectiveText,
@@ -422,6 +446,9 @@ export class BattlefieldScene extends Phaser.Scene {
     }
     this.tutorialProgressText.setText(
       `처음 안내  ${this.tutorial.currentStepNumber} / ${this.tutorial.stepCount}`,
+    );
+    this.tutorialRecordText.setText(
+      `${this.playerRecord.playerName}\n일반 ${this.normalBestText()} · 챌린지 ${this.challengeBestText()}`,
     );
     this.tutorialTitleText.setText(step.title);
     this.tutorialBodyText.setText(step.body);
@@ -695,6 +722,39 @@ export class BattlefieldScene extends Phaser.Scene {
       this.updatePhaseInterface();
       this.renderBattlefield();
     });
+
+    this.input.keyboard?.on('keydown-L', () => {
+      this.handleRecordReset();
+    });
+  }
+
+  private handleRecordReset(): void {
+    if (this.phase !== 'tutorial' && this.phase !== 'preparation') {
+      this.setStatus(
+        '개인 기록은 튜토리얼 또는 방어 준비 화면에서 초기화할 수 있습니다.',
+        true,
+      );
+      return;
+    }
+
+    if (this.time.now > this.recordResetArmedUntil) {
+      this.recordResetArmedUntil = this.time.now + 3_000;
+      this.setStatus(
+        '개인 최고 기록을 지우려면 3초 안에 L 키를 한 번 더 누르세요.',
+        true,
+      );
+      return;
+    }
+
+    this.playerRecord = this.gameRecordService.reset();
+    this.recordResetArmedUntil = 0;
+    this.latestRecordNotice = '';
+    this.setStatus('브라우저에 저장된 개인 최고 기록을 초기화했습니다.');
+    if (this.phase === 'tutorial') {
+      this.renderTutorialStep();
+    } else {
+      this.updatePhaseInterface();
+    }
   }
 
   private selectTower(towerArchetype: TowerArchetype): void {
@@ -1486,6 +1546,21 @@ export class BattlefieldScene extends Phaser.Scene {
     const completedRound = won
       ? this.roundSession.recordAttackVictory(this.attackCombat.elapsedTimeMs)
       : null;
+    this.latestRecordNotice = '';
+    if (
+      won &&
+      completedRound !== null &&
+      this.roundSession.isChallengeMode
+    ) {
+      const recordUpdate = this.gameRecordService.recordChallengeCompletion(
+        this.roundSession.challengeRound,
+        completedRound.attackTimeMs,
+      );
+      this.playerRecord = recordUpdate.record;
+      this.latestRecordNotice = recordUpdate.isNewBest
+        ? '신기록! 개인 최고 기록을 브라우저에 저장했습니다.'
+        : `개인 최고: ${this.challengeBestText()}`;
+    }
     const failure =
       this.attackCombat.failureReason === 'commander-defeated'
         ? '지휘관 전투 불능'
@@ -1495,7 +1570,7 @@ export class BattlefieldScene extends Phaser.Scene {
     this.resultText
       .setColor(won ? GAME_COLORS.secondary : '#ff7b8f')
       .setText(
-        `공격 결과 · ${this.roundName()}\n${won ? '기지 돌파 성공' : '공격 실패 · 도전 종료'}\n\n${won ? `돌파 시간 ${this.formatTime(completedRound?.attackTimeMs ?? 0)}` : `실패 원인: ${failure}`}\n${!won && this.roundSession.isChallengeMode ? `${this.challengeRecordText()}\n` : ''}\n${won ? '[Enter] 다음 라운드' : '[R] 1라운드부터 다시 시작'}`,
+        `공격 결과 · ${this.roundName()}\n${won ? '기지 돌파 성공' : '공격 실패 · 도전 종료'}\n\n${won ? `돌파 시간 ${this.formatTime(completedRound?.attackTimeMs ?? 0)}` : `실패 원인: ${failure}`}\n${this.roundSession.isChallengeMode ? `${this.latestRecordNotice || this.challengeRecordText()}\n` : ''}\n${won ? '[Enter] 다음 라운드' : '[R] 1라운드부터 다시 시작'}`,
       )
       .setVisible(true);
     this.setStatus(
@@ -1569,11 +1644,18 @@ export class BattlefieldScene extends Phaser.Scene {
   }
 
   private showCampaignComplete(): void {
+    const recordUpdate = this.gameRecordService.recordNormalCompletion(
+      this.roundSession.totalAttackTimeMs,
+    );
+    this.playerRecord = recordUpdate.record;
+    this.latestRecordNotice = recordUpdate.isNewBest
+      ? '신기록! 개인 최고 기록을 브라우저에 저장했습니다.'
+      : `개인 최고 ${this.normalBestText()}`;
     this.phase = 'campaign-complete';
     this.resultText
       .setColor(GAME_COLORS.secondary)
       .setText(
-        `일반 모드 완료\n5라운드 누적 ${this.formatTime(this.roundSession.totalAttackTimeMs)}\n부모님: "밥 먹자!"\n아이가 방을 나가자 장난감들이 스스로 움직이기 시작한다.\n\nEnter: 챌린지 모드 시작\nR: 처음부터 다시 시작`,
+        `일반 모드 완료\n5라운드 누적 ${this.formatTime(this.roundSession.totalAttackTimeMs)}\n${this.latestRecordNotice}\n기록일 ${this.normalBestDateText()}\n\n부모님: "밥 먹자!"\n아이가 방을 나가자 장난감들이 스스로 움직이기 시작한다.\n\n[Enter] 챌린지 모드 시작\n[R] 처음부터 다시 시작`,
       )
       .setVisible(true);
     this.setStatus('부모님의 식사 호출에 아이가 방을 나갑니다. 장난감들이 스스로 움직이기 시작합니다.');
@@ -1593,10 +1675,10 @@ export class BattlefieldScene extends Phaser.Scene {
     if (this.phase === 'tutorial') {
       this.phaseText.setText('처음 안내');
       this.combatInfoText.setText(
-        '준비 시간 일시 정지\n[Enter] 다음\n[Esc] 건너뛰기',
+        `준비 시간 일시 정지\n${this.personalRecordSummary()}`,
       );
       this.helpText.setText(
-        '핵심 흐름\n\n1. 방어선 설계\n2. 자동 방어 전투\n3. 공격 부대 편성\n4. 내 방어선 돌파',
+        '핵심 흐름\n\n1. 방어선 설계\n2. 자동 방어 전투\n3. 공격 부대 편성\n4. 내 방어선 돌파\n\n[Enter] 다음  [Esc] 건너뛰기\n[L] 개인 기록 초기화(두 번)',
       );
       return;
     }
@@ -1715,8 +1797,42 @@ export class BattlefieldScene extends Phaser.Scene {
   }
 
   private challengeRecordText(): string {
-    const lastTime = this.roundSession.latestChallengeAttackTimeMs;
-    return `최고 완료 ${this.roundSession.highestCompletedChallengeRound}R${lastTime === null ? '' : ` · 최근 돌파 ${this.formatTime(lastTime)}`}`;
+    return `개인 최고 ${this.challengeBestText()}`;
+  }
+
+  private personalRecordSummary(): string {
+    return [
+      this.playerRecord.playerName,
+      `일반: ${this.normalBestText()}`,
+      `챌린지: ${this.challengeBestText()}`,
+    ].join('\n');
+  }
+
+  private normalBestText(): string {
+    const best = this.playerRecord.normalBest;
+    return best === null
+      ? '기록 없음'
+      : this.formatTime(best.totalAttackTimeMs);
+  }
+
+  private normalBestDateText(): string {
+    const best = this.playerRecord.normalBest;
+    return best === null ? '-' : this.formatRecordDate(best.achievedAt);
+  }
+
+  private challengeBestText(): string {
+    const best = this.playerRecord.challengeBest;
+    return best === null
+      ? '기록 없음'
+      : `${best.round}R · ${this.formatTime(best.attackTimeMs)}`;
+  }
+
+  private formatRecordDate(isoDate: string): string {
+    return new Intl.DateTimeFormat('ko-KR', {
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+    }).format(new Date(isoDate));
   }
 
   private defenseHelpText(): string {
