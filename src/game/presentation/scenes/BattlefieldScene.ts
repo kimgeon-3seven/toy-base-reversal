@@ -134,8 +134,7 @@ export class BattlefieldScene extends Phaser.Scene {
     this.phase = 'tutorial';
     this.preparationRemainingMs = PREPARATION_DURATION_MS;
     this.combat = null;
-    this.squadPlan = null;
-    this.attackCombat = null;
+    this.clearAttackState();
     const battlefield = new Battlefield(
       createBattlefieldMap(),
       new BreadthFirstPathfinder(),
@@ -1209,7 +1208,12 @@ export class BattlefieldScene extends Phaser.Scene {
 
   private renderAttackers(): void {
     this.attackerGraphics.clear();
-    if (this.attackCombat === null) return;
+    if (
+      this.attackCombat === null ||
+      (this.phase !== 'attack-combat' && this.phase !== 'attack-result')
+    ) {
+      return;
+    }
 
     const commander = this.attackCombat.commander;
     const center = this.gridCenter(commander.position);
@@ -1408,9 +1412,7 @@ export class BattlefieldScene extends Phaser.Scene {
   private startAttackPreparation(): void {
     this.editor.restoreBlueprint();
     this.combat = null;
-    this.attackCombat = null;
-    this.isFocusTargeting = false;
-    this.isDisruptTargeting = false;
+    this.clearAttackState();
     this.squadPlan = createPrototypeSquadPlan(this.roundSession.currentRound);
     this.phase = 'attack-preparation';
     this.attackPreparationRemainingMs = ATTACK_PREPARATION_DURATION_MS;
@@ -1511,6 +1513,7 @@ export class BattlefieldScene extends Phaser.Scene {
   private resetToPreparation(): void {
     this.editor.restoreBlueprint();
     this.combat = null;
+    this.clearAttackState();
     this.phase = 'preparation';
     this.preparationRemainingMs = PREPARATION_DURATION_MS;
     this.selectedStructureId = null;
@@ -1518,6 +1521,13 @@ export class BattlefieldScene extends Phaser.Scene {
     this.setStatus('전투 전 설계와 시설 체력을 복원했습니다. 다시 편집할 수 있습니다.');
     this.updatePhaseInterface();
     this.renderBattlefield();
+  }
+
+  private clearAttackState(): void {
+    this.attackCombat = null;
+    this.squadPlan = null;
+    this.isFocusTargeting = false;
+    this.isDisruptTargeting = false;
   }
 
   private continueAfterAttackVictory(): void {
