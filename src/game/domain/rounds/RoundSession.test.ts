@@ -1,14 +1,31 @@
 import { describe, expect, it } from 'vitest';
 import { RoundSession } from './RoundSession';
 
+function defenseResult(
+  defeatedEnemies: number,
+  remainingCoreHealth: number,
+) {
+  return {
+    defeatedEnemies,
+    breachedEnemies: 2,
+    remainingCoreHealth,
+    coreMaxHealth: 120,
+    sortieReward: {
+      basePoints: 21,
+      killBonus: 3,
+      coreHealthBonus: 1,
+      totalPoints: 25,
+      killRate: defeatedEnemies / (defeatedEnemies + 2),
+      coreHealthRate: remainingCoreHealth / 120,
+    },
+  };
+}
+
 describe('RoundSession', () => {
   it('records defense and attack results before advancing', () => {
     const session = new RoundSession(2);
 
-    session.recordDefenseVictory({
-      defeatedEnemies: 9,
-      remainingCoreHealth: 80,
-    });
+    session.recordDefenseVictory(defenseResult(9, 80));
     const result = session.recordAttackVictory(42_500);
 
     expect(result.roundNumber).toBe(1);
@@ -21,10 +38,7 @@ describe('RoundSession', () => {
   it('completes normal mode after the configured number of rounds', () => {
     const session = new RoundSession(5);
     for (let round = 1; round <= 5; round += 1) {
-      session.recordDefenseVictory({
-        defeatedEnemies: 9 + round,
-        remainingCoreHealth: 100,
-      });
+      session.recordDefenseVictory(defenseResult(9 + round, 100));
       session.recordAttackVictory(round * 10_000);
       if (round < 5) {
         expect(session.advanceToNextRound()).toBe(true);
@@ -49,10 +63,7 @@ describe('RoundSession', () => {
   it('enters challenge mode explicitly and then advances without a round cap', () => {
     const session = new RoundSession(2);
     for (let round = 1; round <= 2; round += 1) {
-      session.recordDefenseVictory({
-        defeatedEnemies: 10,
-        remainingCoreHealth: 60,
-      });
+      session.recordDefenseVictory(defenseResult(10, 60));
       session.recordAttackVictory(round * 10_000);
       if (round < 2) session.advanceToNextRound();
     }
@@ -64,10 +75,7 @@ describe('RoundSession', () => {
     expect(session.currentRound).toBe(3);
     expect(session.challengeRound).toBe(1);
 
-    session.recordDefenseVictory({
-      defeatedEnemies: 20,
-      remainingCoreHealth: 40,
-    });
+    session.recordDefenseVictory(defenseResult(20, 40));
     session.recordAttackVictory(55_000);
 
     expect(session.completedChallengeRounds).toHaveLength(1);

@@ -89,14 +89,29 @@ describe('DefenseEditor construction transactions', () => {
     expect(editor.constructionFunds).toBe(5);
   });
 
-  it('does not refund a structure that is deliberately destroyed', () => {
-    const editor = createEditor(8);
+  it('undoes and redoes placement, movement, sale, and upgrade transactions', () => {
+    const editor = createEditor(10);
     const placed = editor.placeTower('popgun', new GridPosition(1, 0));
     if (!placed.success) throw new Error('Expected placement to succeed.');
+    editor.move(placed.structure.id, new GridPosition(1, 2));
+    editor.upgradeTower(placed.structure.id);
+    editor.sell(placed.structure.id);
 
-    editor.destroy(placed.structure.id);
-
-    expect(editor.constructionFunds).toBe(5);
+    expect(editor.battlefield.structures).toHaveLength(0);
+    expect(editor.constructionFunds).toBe(10);
+    expect(editor.undo()).toBe(true);
+    expect(editor.battlefield.structures[0]?.upgradeLevel).toBe(2);
+    expect(editor.undo()).toBe(true);
+    expect(editor.battlefield.structures[0]?.upgradeLevel).toBe(1);
+    expect(editor.undo()).toBe(true);
+    expect(editor.battlefield.structures[0]?.position).toEqual(
+      new GridPosition(1, 0),
+    );
+    expect(editor.undo()).toBe(true);
+    expect(editor.battlefield.structures).toHaveLength(0);
+    expect(editor.constructionFunds).toBe(10);
+    expect(editor.redo()).toBe(true);
+    expect(editor.battlefield.structures).toHaveLength(1);
   });
 
   it('restores saved funds with the blueprint to prevent refund duplication', () => {

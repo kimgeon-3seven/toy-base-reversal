@@ -1,6 +1,10 @@
-export interface DefenseRoundResult {
-  readonly defeatedEnemies: number;
-  readonly remainingCoreHealth: number;
+import type {
+  DefensePerformanceSnapshot,
+  DefenseSortieReward,
+} from './DefensePerformanceRewardPolicy';
+
+export interface DefenseRoundResult extends DefensePerformanceSnapshot {
+  readonly sortieReward: DefenseSortieReward;
 }
 
 export interface RoundResult {
@@ -52,6 +56,12 @@ export class RoundSession {
     return this.pendingDefenseResult !== null;
   }
 
+  public get currentDefenseResult(): DefenseRoundResult | null {
+    return this.pendingDefenseResult === null
+      ? null
+      : { ...this.pendingDefenseResult };
+  }
+
   public get isNormalModeComplete(): boolean {
     return this.completedRoundResults.length >= this.normalRoundCount;
   }
@@ -84,7 +94,14 @@ export class RoundSession {
     if (this.isNormalModeComplete && !this.isChallengeMode) {
       throw new Error('Challenge mode must begin before recording more rounds.');
     }
-    if (result.defeatedEnemies < 0 || result.remainingCoreHealth <= 0) {
+    if (
+      result.defeatedEnemies < 0 ||
+      result.breachedEnemies < 0 ||
+      result.defeatedEnemies + result.breachedEnemies <= 0 ||
+      result.remainingCoreHealth <= 0 ||
+      result.coreMaxHealth < result.remainingCoreHealth ||
+      result.sortieReward.totalPoints <= 0
+    ) {
       throw new Error('A defense victory requires valid surviving-core results.');
     }
     if (this.pendingDefenseResult !== null) {

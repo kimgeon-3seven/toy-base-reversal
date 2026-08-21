@@ -22,6 +22,7 @@ import {
   createPrototypeDefenseCombatConfig,
   createPrototypeDefenseWave,
 } from './DefenseCombatConfig';
+import { defenseSortieRewardForRound } from './DefenseRewardConfig';
 import { INITIAL_DEFENSE_PLACEMENTS } from './InitialDefenseConfig';
 import { createPrototypeTowerUpgradePolicy } from './TowerUpgradeConfig';
 
@@ -30,17 +31,14 @@ interface RoundBalanceResult {
   readonly defenseWon: boolean;
   readonly remainingCoreHealth: number;
   readonly leakCount: number;
+  readonly awardedSortiePoints: number;
   readonly attackWon: boolean;
   readonly attackFailureReason: AttackCombat['failureReason'];
   readonly attackTimeMs: number;
 }
 
 function createScenarioEditor(): DefenseEditor {
-  const editor = new DefenseEditor(
-    new Battlefield(createBattlefieldMap(), new BreadthFirstPathfinder()),
-    createPrototypeConstructionEconomy(),
-    createPrototypeTowerUpgradePolicy(),
-  );
+  const editor = createEmptyEditor();
   for (const placement of INITIAL_DEFENSE_PLACEMENTS) {
     const position = new GridPosition(placement.column, placement.row);
     const result =
@@ -51,6 +49,24 @@ function createScenarioEditor(): DefenseEditor {
   }
   editor.saveBlueprint();
   return editor;
+}
+
+function createEmptyEditor(): DefenseEditor {
+  return new DefenseEditor(
+    new Battlefield(createBattlefieldMap(), new BreadthFirstPathfinder()),
+    createPrototypeConstructionEconomy(),
+    createPrototypeTowerUpgradePolicy(),
+  );
+}
+
+function simulateDefense(editor: DefenseEditor, round: number): DefenseCombat {
+  const defense = new DefenseCombat(
+    editor.battlefield,
+    createPrototypeDefenseWave(round),
+    createPrototypeDefenseCombatConfig(),
+  );
+  defense.update(120_000);
+  return defense;
 }
 
 function fillBaselineSquad(plan: SquadPlan, roundNumber: number): void {
@@ -110,9 +126,19 @@ function runNormalModeBaseline(): readonly RoundBalanceResult[] {
     const defenseWon = defense.state === 'won';
     const remainingCoreHealth = defense.coreHealth;
     const leakCount = defense.leakCount;
+    const sortieReward = defenseSortieRewardForRound(round, {
+      defeatedEnemies: defense.killCount,
+      breachedEnemies: defense.leakCount,
+      remainingCoreHealth: defense.coreHealth,
+      coreMaxHealth: defense.config.coreMaxHealth,
+    });
 
     editor.restoreBlueprint();
-    const plan = createPrototypeSquadPlan(round, false);
+    const plan = createPrototypeSquadPlan(
+      round,
+      false,
+      sortieReward.totalPoints,
+    );
     fillBaselineSquad(plan, round);
     const attack = new AttackCombat(
       editor.battlefield,
@@ -125,6 +151,7 @@ function runNormalModeBaseline(): readonly RoundBalanceResult[] {
       defenseWon,
       remainingCoreHealth,
       leakCount,
+      awardedSortiePoints: sortieReward.totalPoints,
       attackWon: attack.state === 'won',
       attackFailureReason: attack.failureReason,
       attackTimeMs: attack.elapsedTimeMs,
@@ -153,10 +180,45 @@ describe('normal mode balance baseline', () => {
       expect(result.defenseWon).toBe(true);
       expect(result.attackWon).toBe(true);
       expect(result.attackFailureReason).toBeNull();
-      expect(result.attackTimeMs).toBeGreaterThanOrEqual(target?.minimum ?? 0);
+      expect(result.awardedSortiePoints).toBeGreaterThan(0);
+      const rewardedMinimum = Math.max(
+        20_000,
+        Math.floor((target?.minimum ?? 0) * 0.65),
+      );
+      expect(result.attackTimeMs).toBeGreaterThanOrEqual(rewardedMinimum);
       expect(result.attackTimeMs).toBeLessThanOrEqual(
         target?.maximum ?? Number.POSITIVE_INFINITY,
       );
     }
+  });
+
+  it('punishes skipping defense construction entirely', () => {
+    const defense = simulateDefense(createEmptyEditor(), 1);
+
+    expect(defense.state).toBe('lost');
+    expect(defense.coreHealth).toBe(0);
+  });
+
+  it('rewards a mixed round-three defense over one-type tower spam', () => {
+    const spamEditor = createEmptyEditor();
+    for (const position of [
+      new GridPosition(5, 4),
+      new GridPosition(8, 8),
+      new GridPosition(11, 4),
+      new GridPosition(14, 8),
+      new GridPosition(16, 4),
+    ]) {
+      const result = spamEditor.placeTower('popgun', position);
+      if (!result.success) throw new Error(`Spam setup failed: ${result.reason}`);
+    }
+
+    const mixedEditor = createScenarioEditor();
+    prepareNextRoundDefense(mixedEditor, 2);
+    prepareNextRoundDefense(mixedEditor, 3);
+    const spam = simulateDefense(spamEditor, 3);
+    const mixed = simulateDefense(mixedEditor, 3);
+
+    expect(mixed.killCount).toBeGreaterThan(spam.killCount);
+    expect(mixed.coreHealth).toBeGreaterThanOrEqual(spam.coreHealth);
   });
 });

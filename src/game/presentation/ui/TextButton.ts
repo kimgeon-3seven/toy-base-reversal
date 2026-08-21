@@ -19,6 +19,7 @@ export class TextButton {
   private readonly background: Phaser.GameObjects.Rectangle;
   private readonly label: Phaser.GameObjects.Text;
   private enabled = true;
+  private selected = false;
 
   public constructor(
     scene: Phaser.Scene,
@@ -28,15 +29,15 @@ export class TextButton {
     height: number,
     label: string,
     onClick: () => void,
-    colors: TextButtonColors = DEFAULT_COLORS,
+    private readonly colors: TextButtonColors = DEFAULT_COLORS,
   ) {
     this.background = scene.add
-      .rectangle(0, 0, width, height, colors.fill, 1)
-      .setStrokeStyle(2, colors.stroke, 0.95)
+      .rectangle(0, 0, width, height, this.colors.fill, 1)
+      .setStrokeStyle(2, this.colors.stroke, 0.95)
       .setInteractive({ useHandCursor: true });
     this.label = scene.add
       .text(0, 0, label, {
-        color: colors.text,
+        color: this.colors.text,
         fontFamily: 'Arial, sans-serif',
         fontSize: '16px',
         fontStyle: 'bold',
@@ -57,10 +58,10 @@ export class TextButton {
       },
     );
     this.background.on('pointerover', () => {
-      if (this.enabled) this.background.setFillStyle(colors.hover, 1);
+      if (this.enabled) this.background.setFillStyle(this.colors.hover, 1);
     });
     this.background.on('pointerout', () => {
-      this.background.setFillStyle(colors.fill, 1);
+      this.refreshAppearance();
     });
   }
 
@@ -79,11 +80,27 @@ export class TextButton {
     }
   }
 
+  public setSelected(selected: boolean): void {
+    if (this.selected === selected) return;
+    this.selected = selected;
+    this.refreshAppearance();
+  }
+
   public setVisible(visible: boolean): void {
     this.gameObject.setVisible(visible);
   }
 
   public setDepth(depth: number): void {
     this.gameObject.setDepth(depth);
+  }
+
+  private refreshAppearance(): void {
+    this.background
+      .setFillStyle(this.selected ? this.colors.hover : this.colors.fill, 1)
+      .setStrokeStyle(
+        this.selected ? 4 : 2,
+        this.selected ? 0xffd166 : this.colors.stroke,
+        0.95,
+      );
   }
 }

@@ -29,6 +29,7 @@ import {
 import {
   createPrototypeDefenseCombatConfig,
   createPrototypeDefenseWave,
+  defenseWavePreviewForRound,
   PREPARATION_DURATION_MS,
 } from '../../config/DefenseCombatConfig';
 import { GAME_COLORS, GAME_HEIGHT, GAME_WIDTH } from '../../config/GameConfig';
@@ -36,6 +37,8 @@ import { INITIAL_DEFENSE_PLACEMENTS } from '../../config/InitialDefenseConfig';
 import {
   isTowerAvailable,
   isUnitAvailable,
+  availableTowerArchetypes,
+  availableUnitArchetypes,
   towerCounterSummary,
   TOWER_NAMES,
   unitCounterSummary,
@@ -53,6 +56,7 @@ import {
 } from '../../config/TowerUpgradeConfig';
 import { NORMAL_MODE_ROUND_COUNT } from '../../config/ChallengeModeConfig';
 import { firstRunGuidePromptFor } from '../../config/FirstRunGuideConfig';
+import { defenseSortieRewardForRound } from '../../config/DefenseRewardConfig';
 import { Battlefield } from '../../domain/battlefield/Battlefield';
 import type { DefenseEditFailureReason } from '../../application/DefenseEditResult';
 import { AttackCombat } from '../../domain/attack/AttackCombat';
@@ -76,6 +80,9 @@ import { BattlefieldAudioDirector } from '../audio/BattlefieldAudioDirector';
 import { BattlefieldBackdropRenderer } from '../rendering/BattlefieldBackdropRenderer';
 import { AudioControlPanel } from '../ui/AudioControlPanel';
 import { PauseMenu } from '../ui/PauseMenu';
+import { DefenseBuildDeck } from '../ui/DefenseBuildDeck';
+import { AttackFormationDeck } from '../ui/AttackFormationDeck';
+import { DefenseRewardPresenter } from '../models/DefenseRewardPresentation';
 
 const PATH_COLORS = [0x59c3c3, 0xff8c61, 0x8bd17c] as const;
 type DefenseScenePhase =
@@ -108,6 +115,9 @@ export class BattlefieldScene extends Phaser.Scene {
   private combatInfoText!: Phaser.GameObjects.Text;
   private resultText!: Phaser.GameObjects.Text;
   private helpText!: Phaser.GameObjects.Text;
+  private contextTitleText!: Phaser.GameObjects.Text;
+  private defenseBuildDeck!: DefenseBuildDeck;
+  private attackFormationDeck!: AttackFormationDeck;
   private firstRunGuide!: FirstRunGuide;
   private tutorialOverlay!: Phaser.GameObjects.Container;
   private tutorialProgressText!: Phaser.GameObjects.Text;
@@ -144,6 +154,7 @@ export class BattlefieldScene extends Phaser.Scene {
   private selectedAttackUnitKind: AttackUnitKind = 'tank';
   private isFocusTargeting = false;
   private isDisruptTargeting = false;
+  private readonly defenseRewardPresenter = new DefenseRewardPresenter();
   private commanderMoveKeys!: {
     up: Phaser.Input.Keyboard.Key;
     down: Phaser.Input.Keyboard.Key;
@@ -327,69 +338,62 @@ export class BattlefieldScene extends Phaser.Scene {
       .rectangle(1124, GAME_HEIGHT / 2 + 12, 264, 676, GAME_COLORS.panel)
       .setStrokeStyle(2, 0x554b78);
 
-    this.add.text(1020, 94, '설계 도구', {
+    this.contextTitleText = this.add.text(1020, 94, '작전 패널', {
       color: GAME_COLORS.primary,
       fontFamily: 'Arial, sans-serif',
       fontSize: '26px',
       fontStyle: 'bold',
     });
 
-    this.selectionText = this.add.text(1020, 142, '', {
+    this.phaseText = this.add.text(1020, 136, '', {
       color: GAME_COLORS.secondary,
       fontFamily: 'Arial, sans-serif',
       fontSize: '18px',
-      lineSpacing: 8,
+      fontStyle: 'bold',
+      wordWrap: { width: 218 },
     });
+
+    this.combatInfoText = this.add.text(1020, 174, '', {
+      color: GAME_COLORS.text,
+      fontFamily: 'Arial, sans-serif',
+      fontSize: '15px',
+      lineSpacing: 5,
+      wordWrap: { width: 218 },
+    });
+
+    this.add.rectangle(1124, 294, 220, 2, 0x554b78, 0.9);
+
+    this.selectionText = this.add.text(1020, 312, '', {
+      color: GAME_COLORS.secondary,
+      fontFamily: 'Arial, sans-serif',
+      fontSize: '15px',
+      fontStyle: 'bold',
+      lineSpacing: 5,
+      wordWrap: { width: 218 },
+    });
+
+    this.add.rectangle(1124, 466, 220, 2, 0x554b78, 0.9);
 
     this.helpText = this.add.text(
       1020,
-      280,
-      [
-        '[1] 공격 타워',
-        '[2] 장애물',
-        '',
-        '왼쪽 클릭',
-        '  배치 / 선택 / 이동',
-        '',
-        '오른쪽 클릭',
-        '  시설 판매',
-        '',
-        '[Delete] 선택 시설 파괴',
-        '[S] 현재 설계 저장',
-        '[R] 저장 설계 복원',
-        '[Space] 방어전 시작',
-        '',
-        '청록·주황·초록 선은',
-        '각 진입로의 최단 경로입니다.',
-      ].join('\n'),
+      484,
+      '',
       {
         color: '#d9d3e8',
         fontFamily: 'Arial, sans-serif',
-        fontSize: '15px',
-        lineSpacing: 4,
+        fontSize: '14px',
+        lineSpacing: 3,
+        wordWrap: { width: 218 },
       },
     );
 
-    this.statusText = this.add.text(32, 724, '', {
+    this.statusText = this.add.text(32, 779, '', {
       color: GAME_COLORS.secondary,
       fontFamily: 'Arial, sans-serif',
-      fontSize: '18px',
-      wordWrap: { width: 930 },
-    });
-
-    this.phaseText = this.add.text(1020, 650, '', {
-      color: GAME_COLORS.primary,
-      fontFamily: 'Arial, sans-serif',
-      fontSize: '19px',
+      fontSize: '14px',
       fontStyle: 'bold',
-    });
-
-    this.combatInfoText = this.add.text(1020, 682, '', {
-      color: GAME_COLORS.text,
-      fontFamily: 'Arial, sans-serif',
-      fontSize: '16px',
-      lineSpacing: 5,
-    });
+      wordWrap: { width: 930 },
+    }).setDepth(61);
 
     this.resultText = this.add
       .text(512, 414, '', {
@@ -406,6 +410,26 @@ export class BattlefieldScene extends Phaser.Scene {
       .setOrigin(0.5)
       .setDepth(20)
       .setVisible(false);
+
+    this.defenseBuildDeck = new DefenseBuildDeck(this, {
+      selectTower: (tower) => this.selectTower(tower),
+      selectObstacle: () => this.selectObstacle(),
+      upgrade: () => this.upgradeSelectedTower(),
+      undo: () => this.undoDefenseEdit(),
+      redo: () => this.redoDefenseEdit(),
+      save: () => this.saveDefenseBlueprint(),
+      reset: () => this.resetDefenseBlueprint(),
+      start: () => this.startDefenseCombat(),
+    });
+    this.attackFormationDeck = new AttackFormationDeck(this, {
+      selectUnit: (unit) => this.selectAttackUnit(unit),
+      addUnit: (laneIndex) => this.addUnitToLane(laneIndex),
+      removeUnit: (laneIndex) => this.removeUnitFromLane(laneIndex),
+      setCommanderLane: (laneIndex) => this.setCommanderLane(laneIndex),
+      recommend: () => this.applyRecommendedSquad(),
+      clear: () => this.clearSquadPlan(),
+      start: () => this.startAttackCombat(),
+    });
 
     this.updatePhaseInterface();
   }
@@ -730,16 +754,21 @@ export class BattlefieldScene extends Phaser.Scene {
       return;
     }
     this.firstRunGuide.beginRoleReversal();
+    const defenseResult = this.roundSession.currentDefenseResult;
+    if (defenseResult === null) {
+      throw new Error('Role reversal requires a completed defense result.');
+    }
+    const reward = this.defenseRewardPresenter.present(defenseResult);
     this.editor.restoreBlueprint();
     this.combat = null;
     this.phase = 'role-reversal';
     this.resultText.setVisible(false);
     this.hideGuideCoachMark();
     this.tutorialProgressText.setText('역할 반전');
-    this.tutorialRecordText.setText('방어 설계 복원 완료');
+    this.tutorialRecordText.setText(`${reward.headline}\n방어 설계 복원 완료`);
     this.tutorialTitleText.setText('이제 네가 공격자다');
     this.tutorialBodyText.setText(
-      '방금 지켜낸 장난감 요새가 이제 공략 대상이 됩니다.\n추천 부대를 이끌고 자신의 방어선을 돌파하세요.',
+      `방금 지켜낸 장난감 요새가 이제 공략 대상이 됩니다.\n${reward.breakdown}\n획득한 포인트로 자신의 방어선에 맞는 부대를 만드세요.`,
     );
     this.tutorialObjectiveText.setText(
       '같은 설계, 반대 역할: 지휘관을 살리고 적 코어를 파괴하세요.',
@@ -921,25 +950,11 @@ export class BattlefieldScene extends Phaser.Scene {
     });
 
     this.input.keyboard?.on('keydown-FOUR', () => {
-      if (this.phase !== 'preparation') {
-        return;
-      }
-      this.activeKind = 'obstacle';
-      this.selectedStructureId = null;
-      this.setStatus(
-        `블록 벽 배치 모드: 부품 ${OBSTACLE_CONSTRUCTION_COST}, 공격 능력 없이 진로를 지연시킵니다.`,
-      );
-      this.renderBattlefield();
+      this.selectObstacle();
     });
 
     this.input.keyboard?.on('keydown-S', () => {
-      if (this.phase !== 'preparation') {
-        return;
-      }
-      this.editor.saveBlueprint();
-      this.setStatus(
-        `현재 방어 설계와 남은 부품 ${this.editor.constructionFunds}을 저장했습니다.`,
-      );
+      this.saveDefenseBlueprint();
     });
 
     this.input.keyboard?.on('keydown-R', () => {
@@ -965,54 +980,34 @@ export class BattlefieldScene extends Phaser.Scene {
         return;
       }
 
-      if (this.phase !== 'preparation') {
-        return;
-      }
-
-      const restored = this.editor.restoreBlueprint();
-      this.selectedStructureId = null;
-      this.setStatus(
-        restored
-          ? `저장한 설계와 부품 ${this.editor.constructionFunds}을 복원하고 시설 체력을 초기화했습니다.`
-          : '복원할 설계가 없습니다.',
-      );
-      this.renderBattlefield();
-    });
-
-    this.input.keyboard?.on('keydown-DELETE', () => {
-      if (this.phase !== 'preparation') {
-        return;
-      }
-      if (this.selectedStructureId === null) {
-        this.setStatus('먼저 파괴할 시설을 선택하세요.', true);
-        return;
-      }
-
-      this.editor.destroy(this.selectedStructureId);
-      this.selectedStructureId = null;
-      this.setStatus(
-        '선택한 시설을 파괴했습니다. 파괴에는 부품 환급이 없습니다.',
-      );
-      this.renderBattlefield();
+      this.resetDefenseBlueprint();
     });
 
     this.input.keyboard?.on('keydown-U', () => {
-      if (this.phase !== 'preparation') return;
-      if (this.selectedStructureId === null) {
-        this.setStatus('먼저 업그레이드할 타워를 선택하세요.', true);
+      this.upgradeSelectedTower();
+    });
+
+    this.input.keyboard?.on('keydown-Z', (event: KeyboardEvent) => {
+      if (
+        this.phase !== 'preparation' ||
+        (!event.ctrlKey && !event.metaKey)
+      ) {
         return;
       }
+      event.preventDefault();
+      if (event.shiftKey) this.redoDefenseEdit();
+      else this.undoDefenseEdit();
+    });
 
-      const result = this.editor.upgradeTower(this.selectedStructureId);
-      if (!result.success) {
-        this.setStatus(this.failureMessage(result.reason), true);
+    this.input.keyboard?.on('keydown-Y', (event: KeyboardEvent) => {
+      if (
+        this.phase !== 'preparation' ||
+        (!event.ctrlKey && !event.metaKey)
+      ) {
         return;
       }
-
-      this.setStatus(
-        `타워를 ${result.receipt.level}레벨로 강화하고 건설 부품 ${result.receipt.cost}을 사용했습니다.`,
-      );
-      this.renderBattlefield();
+      event.preventDefault();
+      this.redoDefenseEdit();
     });
 
     this.input.keyboard?.on('keydown-SPACE', () => {
@@ -1098,47 +1093,19 @@ export class BattlefieldScene extends Phaser.Scene {
     this.input.keyboard?.on('keydown-C', () => {
       if (this.phase !== 'attack-preparation' || this.squadPlan === null) return;
       const nextLane = (this.squadPlan.commanderLane + 1) % 3;
-      this.squadPlan.setCommanderLane(nextLane);
-      this.setStatus(`지휘관 출발 진입로를 ${nextLane + 1}번으로 변경했습니다.`);
-      this.updatePhaseInterface();
+      this.setCommanderLane(nextLane);
     });
 
     this.input.keyboard?.on('keydown-BACKSPACE', () => {
-      if (this.phase !== 'attack-preparation' || this.squadPlan === null) return;
-      const removed = this.squadPlan.removeLastUnit(this.selectedAttackLane);
-      this.setStatus(
-        removed === null
-          ? '선택한 진입로의 대기열이 비어 있습니다.'
-          : `대기열의 마지막 유닛을 제거하고 출격 포인트 ${attackUnitCost(removed)}를 돌려받았습니다.`,
-        removed === null,
-      );
-      this.updatePhaseInterface();
-      this.renderBattlefield();
+      this.removeUnitFromLane(this.selectedAttackLane);
     });
 
     this.input.keyboard?.on('keydown-X', () => {
-      if (this.phase !== 'attack-preparation' || this.squadPlan === null) return;
-      const refunded = this.squadPlan.clearUnits();
-      this.setStatus(
-        refunded === 0
-          ? '편성된 일반 유닛이 없습니다.'
-          : `전체 편성을 비우고 출격 포인트 ${refunded}를 전액 환급받았습니다.`,
-        refunded === 0,
-      );
-      this.updatePhaseInterface();
-      this.renderBattlefield();
+      this.clearSquadPlan();
     });
 
     this.input.keyboard?.on('keydown-P', () => {
-      if (this.phase !== 'attack-preparation') return;
-      this.squadPlan = createPrototypeSquadPlan(
-        this.roundSession.currentRound,
-        true,
-      );
-      this.selectedAttackLane = 1;
-      this.setStatus('현재 라운드의 추천 편성으로 초기화했습니다.');
-      this.updatePhaseInterface();
-      this.renderBattlefield();
+      this.applyRecommendedSquad();
     });
 
     this.input.keyboard?.on('keydown-L', () => {
@@ -1192,6 +1159,89 @@ export class BattlefieldScene extends Phaser.Scene {
     this.setStatus(
       `${TOWER_NAMES[towerArchetype]} 배치 모드: 부품 ${TOWER_CONSTRUCTION_COSTS[towerArchetype]}`,
     );
+    this.updatePhaseInterface();
+    this.renderBattlefield();
+  }
+
+  private selectObstacle(): void {
+    if (this.phase !== 'preparation') return;
+    this.activeKind = 'obstacle';
+    this.selectedStructureId = null;
+    this.setStatus(
+      `블록 벽 배치 모드: 부품 ${OBSTACLE_CONSTRUCTION_COST}, 공격 능력 없이 진로를 지연시킵니다.`,
+    );
+    this.updatePhaseInterface();
+    this.renderBattlefield();
+  }
+
+  private upgradeSelectedTower(): void {
+    if (this.phase !== 'preparation') return;
+    if (this.selectedStructureId === null) {
+      this.setStatus('먼저 업그레이드할 타워를 선택하세요.', true);
+      return;
+    }
+
+    const result = this.editor.upgradeTower(this.selectedStructureId);
+    if (!result.success) {
+      this.setStatus(this.failureMessage(result.reason), true);
+      return;
+    }
+
+    this.setStatus(
+      `타워를 ${result.receipt.level}레벨로 강화하고 건설 부품 ${result.receipt.cost}을 사용했습니다.`,
+    );
+    this.updatePhaseInterface();
+    this.renderBattlefield();
+  }
+
+  private saveDefenseBlueprint(): void {
+    if (this.phase !== 'preparation') return;
+    this.editor.saveBlueprint();
+    this.setStatus(
+      `현재 설계와 남은 부품 ${this.editor.constructionFunds}을 저장 지점으로 지정했습니다.`,
+    );
+    this.updatePhaseInterface();
+  }
+
+  private resetDefenseBlueprint(): void {
+    if (this.phase !== 'preparation') return;
+    const restored = this.editor.restoreBlueprint();
+    this.selectedStructureId = null;
+    this.setStatus(
+      restored
+        ? `저장 지점의 설계와 부품 ${this.editor.constructionFunds}으로 초기화했습니다.`
+        : '복구할 저장 지점이 없습니다.',
+      !restored,
+    );
+    this.updatePhaseInterface();
+    this.renderBattlefield();
+  }
+
+  private undoDefenseEdit(): void {
+    if (this.phase !== 'preparation') return;
+    this.selectedStructureId = null;
+    const restored = this.editor.undo();
+    this.setStatus(
+      restored
+        ? '마지막 설계 변경 한 단계를 되돌렸습니다.'
+        : '되돌릴 설계 변경이 없습니다.',
+      !restored,
+    );
+    this.updatePhaseInterface();
+    this.renderBattlefield();
+  }
+
+  private redoDefenseEdit(): void {
+    if (this.phase !== 'preparation') return;
+    this.selectedStructureId = null;
+    const restored = this.editor.redo();
+    this.setStatus(
+      restored
+        ? '되돌렸던 설계 변경 한 단계를 다시 적용했습니다.'
+        : '다시 적용할 설계 변경이 없습니다.',
+      !restored,
+    );
+    this.updatePhaseInterface();
     this.renderBattlefield();
   }
 
@@ -1206,6 +1256,55 @@ export class BattlefieldScene extends Phaser.Scene {
     this.setStatus(
       `${UNIT_NAMES[unitKind]} 선택: 출격 포인트 ${attackUnitCost(unitKind)}, Q/W/E로 진입로에 추가합니다.`,
     );
+    this.updatePhaseInterface();
+    this.renderBattlefield();
+  }
+
+  private removeUnitFromLane(laneIndex: number): void {
+    if (this.phase !== 'attack-preparation' || this.squadPlan === null) return;
+    this.selectedAttackLane = laneIndex;
+    const removed = this.squadPlan.removeLastUnit(laneIndex);
+    this.setStatus(
+      removed === null
+        ? `${laneIndex + 1}번 진입로 대기열이 비어 있습니다.`
+        : `${laneIndex + 1}번 진입로의 마지막 유닛을 제거하고 ${attackUnitCost(removed)}P를 환급했습니다.`,
+      removed === null,
+    );
+    this.updatePhaseInterface();
+    this.renderBattlefield();
+  }
+
+  private clearSquadPlan(): void {
+    if (this.phase !== 'attack-preparation' || this.squadPlan === null) return;
+    const refunded = this.squadPlan.clearUnits();
+    this.setStatus(
+      refunded === 0
+        ? '편성된 일반 유닛이 없습니다.'
+        : `전체 편성을 비우고 출격 포인트 ${refunded}를 전액 환급했습니다.`,
+      refunded === 0,
+    );
+    this.updatePhaseInterface();
+    this.renderBattlefield();
+  }
+
+  private applyRecommendedSquad(): void {
+    if (this.phase !== 'attack-preparation') return;
+    this.squadPlan = createPrototypeSquadPlan(
+      this.roundSession.currentRound,
+      true,
+      this.squadPlan?.totalBudget,
+    );
+    this.selectedAttackLane = 1;
+    this.setStatus('방어선 상성을 고려한 추천 편성으로 초기화했습니다.');
+    this.updatePhaseInterface();
+    this.renderBattlefield();
+  }
+
+  private setCommanderLane(laneIndex: number): void {
+    if (this.phase !== 'attack-preparation' || this.squadPlan === null) return;
+    if (!this.squadPlan.setCommanderLane(laneIndex)) return;
+    this.selectedAttackLane = laneIndex;
+    this.setStatus(`지휘관이 ${laneIndex + 1}번 진입로에서 출발합니다.`);
     this.updatePhaseInterface();
     this.renderBattlefield();
   }
@@ -1410,8 +1509,18 @@ export class BattlefieldScene extends Phaser.Scene {
       return;
     }
     if (this.phase === 'attack-preparation' && this.squadPlan !== null) {
+      const reward = this.roundSession.currentDefenseResult?.sortieReward;
       this.selectionText.setText(
-        `선택 유닛: ${UNIT_NAMES[this.selectedAttackUnitKind]}\n강함: ${unitCounterSummary(this.selectedAttackUnitKind)}\n비용: ${attackUnitCost(this.selectedAttackUnitKind)}\n남은 포인트: ${this.squadPlan.remainingSortiePoints}`,
+        [
+          '방어 성과 → 공격 자원',
+          reward === undefined
+            ? `총 ${this.squadPlan.totalSortiePoints}P`
+            : `기본 ${reward.basePoints} + 처치 ${reward.killBonus} + 코어 ${reward.coreHealthBonus}`,
+          `획득 ${this.squadPlan.totalSortiePoints}P`,
+          '',
+          `선택: ${UNIT_NAMES[this.selectedAttackUnitKind]} · ${attackUnitCost(this.selectedAttackUnitKind)}P`,
+          `상성: ${unitCounterSummary(this.selectedAttackUnitKind)}`,
+        ].join('\n'),
       );
       return;
     }
@@ -1827,16 +1936,36 @@ export class BattlefieldScene extends Phaser.Scene {
     this.phase = 'result';
     this.hideGuideCoachMark();
     const won = this.combat.state === 'won';
-    if (won && !this.roundSession.isDefenseComplete) {
-      this.roundSession.recordDefenseVictory({
-        defeatedEnemies: this.combat.killCount,
-        remainingCoreHealth: this.combat.coreHealth,
-      });
+    const defensePerformance = {
+      defeatedEnemies: this.combat.killCount,
+      breachedEnemies: this.combat.leakCount,
+      remainingCoreHealth: this.combat.coreHealth,
+      coreMaxHealth: this.combat.config.coreMaxHealth,
+    };
+    const sortieReward = won
+      ? defenseSortieRewardForRound(
+          this.roundSession.currentRound,
+          defensePerformance,
+        )
+      : null;
+    const defenseResult =
+      won && sortieReward !== null
+        ? {
+        ...defensePerformance,
+            sortieReward,
+          }
+        : null;
+    if (defenseResult !== null && !this.roundSession.isDefenseComplete) {
+      this.roundSession.recordDefenseVictory(defenseResult);
     }
+    const rewardPresentation =
+      defenseResult === null
+        ? null
+        : this.defenseRewardPresenter.present(defenseResult);
     this.resultText
       .setColor(won ? GAME_COLORS.secondary : '#ff7b8f')
       .setText(
-        `방어 결과 · ${this.roundName()}\n${won ? '방어 성공' : '방어 실패'}\n\n처치 ${this.combat.killCount}  |  누수 ${this.combat.leakCount}\n코어 피해 ${this.combat.leakDamage}  |  남은 체력 ${this.combat.coreHealth}/${this.combat.config.coreMaxHealth}\n${this.defenseStandoutText()}\n\n${won ? this.roundSession.currentRound === 1 && !this.roundSession.isChallengeMode ? '[Enter] 역할 반전' : '[Enter] 내 기지 공격 준비' : this.roundSession.isChallengeMode ? '도전 종료 · [R] 처음부터 다시 시작' : '[R] 전투 전 설계로 복원'}`,
+        `방어 결과 · ${this.roundName()}\n${won ? '방어 성공' : '방어 실패'}\n\n처치 ${this.combat.killCount}  |  누수 ${this.combat.leakCount}\n코어 피해 ${this.combat.leakDamage}  |  남은 체력 ${this.combat.coreHealth}/${this.combat.config.coreMaxHealth}\n${rewardPresentation === null ? '' : `${rewardPresentation.headline}\n${rewardPresentation.breakdown}\n${rewardPresentation.strategyMessage}\n`}${this.defenseStandoutText()}\n\n${won ? this.roundSession.currentRound === 1 && !this.roundSession.isChallengeMode ? '[Enter] 역할 반전' : '[Enter] 내 기지 공격 준비' : this.roundSession.isChallengeMode ? '도전 종료 · [R] 처음부터 다시 시작' : '[R] 전투 전 설계로 복구'}`,
       )
       .setVisible(true);
     this.setStatus(
@@ -1858,7 +1987,15 @@ export class BattlefieldScene extends Phaser.Scene {
     this.editor.restoreBlueprint();
     this.combat = null;
     this.clearAttackState();
-    this.squadPlan = createPrototypeSquadPlan(this.roundSession.currentRound);
+    const defenseResult = this.roundSession.currentDefenseResult;
+    if (defenseResult === null) {
+      throw new Error('Attack preparation requires a completed defense.');
+    }
+    this.squadPlan = createPrototypeSquadPlan(
+      this.roundSession.currentRound,
+      true,
+      defenseResult.sortieReward.totalPoints,
+    );
     this.phase = 'attack-preparation';
     this.firstRunGuide.beginAttackPreparation();
     this.attackPreparationRemainingMs = ATTACK_PREPARATION_DURATION_MS;
@@ -2119,13 +2256,15 @@ export class BattlefieldScene extends Phaser.Scene {
   private updatePhaseInterface(): void {
     this.syncCanvasAccessibilityState();
     this.syncPauseAvailability();
+    this.renderPreparationDecks();
+    this.contextTitleText.setText(this.contextTitleForPhase());
     if (this.phase === 'tutorial') {
       this.phaseText.setText('장난감 전쟁');
       this.combatInfoText.setText(
         `준비 시간 일시 정지\n${this.personalRecordSummary()}`,
       );
       this.helpText.setText(
-        '핵심 흐름\n\n지킨다\n↓\n역할을 뒤집는다\n↓\n내 기지를 돌파한다\n\n[Enter] 시작  [Esc] 안내 건너뛰기\n[Tab] 순위표  [N] 닉네임\n[L] 개인 기록 초기화(두 번)',
+        '핵심 흐름\n지킨다 → 역할 반전 → 돌파한다\n\n[Enter] 시작\n[Esc] 안내 건너뛰기\n[Tab] 순위표 · [N] 닉네임',
       );
       return;
     }
@@ -2138,7 +2277,7 @@ export class BattlefieldScene extends Phaser.Scene {
         ),
       );
       this.helpText.setText(
-        '같은 기지, 반대 역할\n\n추천 부대가 자동 편성됩니다.\n일반 유닛은 자동 전투하고\n지휘관은 직접 조작합니다.',
+        '같은 기지, 반대 역할\n\n방어 성과가 출격 포인트가 됩니다.\n일반 유닛은 자동 전투하고\n지휘관은 직접 조작합니다.',
       );
       return;
     }
@@ -2172,7 +2311,7 @@ export class BattlefieldScene extends Phaser.Scene {
           'Space: 즉시 시작',
         ].join('\n'),
       );
-      this.helpText.setText(`${this.defenseHelpText()}\n[H] 첫 안내 다시 보기`);
+      this.helpText.setText(this.defenseHelpText());
       return;
     }
 
@@ -2322,66 +2461,108 @@ export class BattlefieldScene extends Phaser.Scene {
   }
 
   private defenseHelpText(): string {
+    const preview = defenseWavePreviewForRound(this.roundSession.currentRound);
     return [
-      '상성 · 화살표 대상에게 강함',
-      `[1] 팝건 ${TOWER_CONSTRUCTION_COSTS.popgun} → 사수`,
-      `[2] 박격포 ${TOWER_CONSTRUCTION_COSTS.mortar} → 군단 (2R)`,
-      `[3] 관통포 ${TOWER_CONSTRUCTION_COSTS.piercer} → 방패병 (3R)`,
-      `[4] 블록 벽 ${OBSTACLE_CONSTRUCTION_COST}`,
+      `웨이브 예고 · 총 ${preview.totalEnemies}명`,
+      `방패 ${preview.archetypeCounts.tank} · 군단 ${preview.archetypeCounts.swarm} · 사수 ${preview.archetypeCounts.ranger}`,
+      `진입로 ${preview.laneCounts.join(' / ')}`,
       '',
-      '설계 조작',
-      '왼쪽 클릭: 배치 / 선택 / 이동',
-      '오른쪽 클릭: 판매 (전액 환급)',
-      '[Delete] 파괴 (환급 없음)',
-      `[U] 선택 타워 강화 (최대 Lv.${MAX_TOWER_LEVEL})`,
-      '[S] 설계 저장  [R] 복원',
-      '[Space] 방어전 시작',
+      '상성',
+      '팝건 → 사수 · 박격포 → 군단',
+      '관통포 → 방패병',
       '',
-      '[Tab] 순위표  [N] 닉네임',
-      '[M] 소리 켜기/끄기',
-      '[Esc] 일시정지',
+      '클릭: 배치/선택/이동',
+      '우클릭: 판매(전액 환급)',
+      `강화 최대 Lv.${MAX_TOWER_LEVEL}`,
+      '[H] 안내 · [Esc] 일시정지',
     ].join('\n');
   }
 
   private attackPreparationHelpText(): string {
     return [
-      '상성 · 화살표 대상에게 강함',
-      `[1] 방패병 ${attackUnitCost('tank')} → 팝건`,
-      `[2] 태엽 군단 ${attackUnitCost('swarm')} → 관통포 (2R)`,
-      `[3] 고무줄 사수 ${attackUnitCost('ranger')} → 박격포 (3R)`,
+      '공격 상성',
+      '방패병 → 팝건',
+      '태엽 군단 → 관통포',
+      '고무줄 사수 → 박격포',
       '',
-      '편성 조작',
-      '[Q/W/E] 상/중/하 진입로 추가',
-      '[Backspace] 선택 진입로 제거',
-      '[X] 전체 비우기  [P] 추천 편성',
-      '[C] 지휘관 진입로 변경',
-      '[Space] 공격 시작',
-      '[Tab] 순위표  [N] 닉네임',
-      '[M] 소리 켜기/끄기',
+      `진입로별 처음 ${SIMULTANEOUS_CAPACITY_PER_LANE}명 동시 출격`,
+      `이후 ${SQUAD_SPAWN_INTERVAL_MS / 1000}초 간격 출격`,
+      '대기열 앞 유닛부터 출발',
       '[Esc] 일시정지',
-      '',
-      `진입로별 처음 ${SIMULTANEOUS_CAPACITY_PER_LANE}명은 동시에`,
-      `나머지는 ${SQUAD_SPAWN_INTERVAL_MS / 1000}초 간격 출격합니다.`,
     ].join('\n');
   }
 
   private attackCombatHelpText(): string {
     return [
       '지휘관 조작',
-      '[W/A/S/D] 지휘관 이동',
-      '[Q] 집중 공격',
-      '  타워 클릭 → 주변 부대 목표 고정',
-      '  우클릭/Esc → 대상 선택 취소',
-      '[E] 교란',
-      '  반경 안 타워 클릭 → 완전 정지',
-      '  우클릭/Esc → 대상 선택 취소',
+      '[W/A/S/D] 이동',
+      '[Q] 집중 공격 → 타워 클릭',
+      '[E] 교란 → 반경 안 타워 클릭',
       '',
-      '일반 유닛은 자동으로 이동하고',
-      '시설과 코어를 공격합니다.',
+      '일반 유닛은 자동 전투',
       '지휘관 사망 시 즉시 실패합니다.',
-      '[M] 소리 켜기/끄기',
       '[Esc] 대상 취소 / 일시정지',
     ].join('\n');
+  }
+
+  private renderPreparationDecks(): void {
+    const isDefensePreparation = this.phase === 'preparation';
+    this.defenseBuildDeck.setVisible(isDefensePreparation);
+    if (isDefensePreparation) {
+      const selected =
+        this.selectedStructureId === null
+          ? null
+          : (this.editor.battlefield.structures.find(
+              (structure) => structure.id === this.selectedStructureId,
+            ) ?? null);
+      const upgradeCost =
+        selected === null ? null : this.editor.upgradeCost(selected);
+      this.defenseBuildDeck.render({
+        activeKind: this.activeKind,
+        activeTower: this.activeTowerArchetype,
+        availableTowers: availableTowerArchetypes(
+          this.roundSession.currentRound,
+        ),
+        funds: this.editor.constructionFunds,
+        canUndo: this.editor.canUndo,
+        canRedo: this.editor.canRedo,
+        canUpgrade:
+          selected?.kind === 'tower' &&
+          upgradeCost !== null &&
+          this.editor.constructionFunds >= upgradeCost,
+      });
+    }
+
+    const isAttackPreparation =
+      this.phase === 'attack-preparation' && this.squadPlan !== null;
+    this.attackFormationDeck.setVisible(isAttackPreparation);
+    if (isAttackPreparation && this.squadPlan !== null) {
+      this.attackFormationDeck.render({
+        selectedUnit: this.selectedAttackUnitKind,
+        availableUnits: availableUnitArchetypes(
+          this.roundSession.currentRound,
+        ),
+        lanes: this.squadPlan.lanes,
+        commanderLane: this.squadPlan.commanderLane,
+        remainingPoints: this.squadPlan.remainingSortiePoints,
+        totalPoints: this.squadPlan.totalSortiePoints,
+      });
+    }
+  }
+
+  private contextTitleForPhase(): string {
+    const titles: Readonly<Record<DefenseScenePhase, string>> = {
+      tutorial: '작전 개요',
+      preparation: '방어 설계',
+      combat: '방어 관제',
+      result: '방어 결과',
+      'role-reversal': '역할 전환',
+      'attack-preparation': '공격 편성',
+      'attack-combat': '지휘관 명령',
+      'attack-result': '공격 결과',
+      'campaign-complete': '작전 기록',
+    };
+    return titles[this.phase];
   }
 
   private setStatus(message: string, isWarning = false): void {

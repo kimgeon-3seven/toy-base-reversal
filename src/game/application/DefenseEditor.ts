@@ -14,6 +14,7 @@ import type {
   DefenseSaleResult,
   DefenseUpgradeResult,
 } from './DefenseEditResult';
+import { DefenseEditHistory, type DefenseEditSnapshot } from './DefenseEditHistory';
 
 const STRUCTURE_HEALTH: Readonly<Record<StructureKind, number>> = {
   tower: 100,
@@ -30,6 +31,7 @@ export class DefenseEditor {
   private nextStructureSequence = 1;
   private savedBlueprint: DefenseBlueprint | null = null;
   private savedConstructionFunds: number | null = null;
+  private readonly editHistory = new DefenseEditHistory();
 
   public constructor(
     public readonly battlefield: Battlefield,
@@ -39,6 +41,14 @@ export class DefenseEditor {
 
   public get constructionFunds(): number {
     return this.economy.funds;
+  }
+
+  public get canUndo(): boolean {
+    return this.editHistory.canUndo;
+  }
+
+  public get canRedo(): boolean {
+    return this.editHistory.canRedo;
   }
 
   public constructionCost(
@@ -65,6 +75,7 @@ export class DefenseEditor {
     towerArchetype: TowerArchetype | null =
       kind === 'tower' ? 'popgun' : null,
   ): DefenseEditResult {
+    const previous = this.captureEditSnapshot();
     const constructionCost = this.economy.costFor(kind, towerArchetype);
     if (!this.economy.canAfford(constructionCost)) {
       return { success: false, reason: 'insufficient-funds' };
@@ -84,6 +95,7 @@ export class DefenseEditor {
 
     const result = this.battlefield.place(structure);
     if (result.success) {
+      this.editHistory.record(previous);
       this.economy.spend(constructionCost);
       this.nextStructureSequence += 1;
     }
@@ -99,25 +111,26 @@ export class DefenseEditor {
   }
 
   public move(structureId: string, position: GridPosition): BattlefieldResult {
-    return this.battlefield.move(structureId, position);
+    const previous = this.captureEditSnapshot();
+    const result = this.battlefield.move(structureId, position);
+    if (result.success) this.editHistory.record(previous);
+    return result;
   }
 
   public sell(structureId: string): DefenseSaleResult {
+    const previous = this.captureEditSnapshot();
     const result = this.battlefield.sell(structureId);
     if (!result.success) {
       return result;
     }
 
+    this.editHistory.record(previous);
     const refund = this.saleRefund(result.structure);
     this.economy.refund(refund);
     return {
       success: true,
       receipt: { structure: result.structure, refund },
     };
-  }
-
-  public destroy(structureId: string): BattlefieldResult {
-    return this.battlefield.destroy(structureId);
   }
 
   public upgradeTower(structureId: string): DefenseUpgradeResult {
@@ -139,10 +152,12 @@ export class DefenseEditor {
       return { success: false, reason: 'insufficient-funds' };
     }
 
+    const previous = this.captureEditSnapshot();
     structure.upgradeToNextLevel(
       this.upgradePolicy.maxHealthMultiplierForNextLevel(structure),
     );
     this.economy.spend(cost);
+    this.editHistory.record(previous);
     return {
       success: true,
       receipt: { structure, cost, level: structure.upgradeLevel },
@@ -152,6 +167,7 @@ export class DefenseEditor {
   public saveBlueprint(): void {
     this.savedBlueprint = this.battlefield.captureBlueprint();
     this.savedConstructionFunds = this.economy.funds;
+    this.editHistory.clear();
   }
 
   public restoreBlueprint(): boolean {
@@ -164,10 +180,37 @@ export class DefenseEditor {
 
     this.battlefield.restoreBlueprint(this.savedBlueprint);
     this.economy.restoreFunds(this.savedConstructionFunds);
+    this.editHistory.clear();
+    return true;
+  }
+
+  public undo(): boolean {
+    const previous = this.editHistory.undo(this.captureEditSnapshot());
+    if (previous === null) return false;
+    this.restoreEditSnapshot(previous);
+    return true;
+  }
+
+  public redo(): boolean {
+    const next = this.editHistory.redo(this.captureEditSnapshot());
+    if (next === null) return false;
+    this.restoreEditSnapshot(next);
     return true;
   }
 
   public grantConstructionFunds(amount: number): void {
     this.economy.grant(amount);
+  }
+
+  private captureEditSnapshot(): DefenseEditSnapshot {
+    return {
+      blueprint: this.battlefield.captureBlueprint(),
+      constructionFunds: this.economy.funds,
+    };
+  }
+
+  private restoreEditSnapshot(snapshot: DefenseEditSnapshot): void {
+    this.battlefield.restoreBlueprint(snapshot.blueprint);
+    this.economy.restoreFunds(snapshot.constructionFunds);
   }
 }

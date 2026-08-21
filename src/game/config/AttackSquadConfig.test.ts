@@ -21,6 +21,13 @@ describe('AttackSquadConfig', () => {
     expect(plan.remainingSortiePoints).toBe(plan.totalSortiePoints);
   });
 
+  it('creates a rewarded squad with an explicit defense-earned budget', () => {
+    const plan = createPrototypeSquadPlan(1, true, 29);
+
+    expect(plan.totalSortiePoints).toBe(29);
+    expect(plan.unitCount).toBe(3);
+  });
+
   it('grows more slowly in challenge mode and caps browser load', () => {
     expect([5, 6, 7, 10, 11, 20].map(sortiePointsForRound)).toEqual([
       36, 38, 40, 46, 48, 48,

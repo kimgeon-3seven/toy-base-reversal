@@ -146,3 +146,30 @@ export function defenseWaveCountForRound(roundNumber: number): number {
   return NORMAL_MODE_WAVE_COUNT_BY_ROUND[roundNumber - 1] ??
     NORMAL_MODE_WAVE_COUNT_BY_ROUND[0];
 }
+
+export interface DefenseWavePreview {
+  readonly totalEnemies: number;
+  readonly archetypeCounts: Readonly<Record<UnitArchetype, number>>;
+  readonly laneCounts: readonly number[];
+}
+
+export function defenseWavePreviewForRound(
+  roundNumber: number,
+): DefenseWavePreview {
+  const wave = createPrototypeDefenseWave(roundNumber);
+  const archetypeCounts: Record<UnitArchetype, number> = {
+    tank: 0,
+    swarm: 0,
+    ranger: 0,
+  };
+  const laneCounts = [0, 0, 0];
+  for (const spawn of wave.spawns) {
+    archetypeCounts[spawn.stats.archetype] += 1;
+    laneCounts[spawn.entryIndex] = (laneCounts[spawn.entryIndex] ?? 0) + 1;
+  }
+  return {
+    totalEnemies: wave.spawns.length,
+    archetypeCounts,
+    laneCounts,
+  };
+}

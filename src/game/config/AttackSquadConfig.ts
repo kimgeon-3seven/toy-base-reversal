@@ -24,7 +24,7 @@ class PrototypeUnitAvailability implements UnitAvailabilityPolicy {
   }
 }
 
-const prototypeSortiePointPolicy = new StagedCappedSortiePointPolicy(
+export const prototypeSortiePointPolicy = new StagedCappedSortiePointPolicy(
   STARTING_SORTIE_POINTS,
   SORTIE_POINTS_PER_ROUND,
   NORMAL_MODE_ROUND_COUNT,
@@ -49,9 +49,13 @@ export function sortiePointsForRound(roundNumber: number): number {
 export function createPrototypeSquadPlan(
   roundNumber = 1,
   applyRecommendedPreset = true,
+  totalBudgetOverride?: number,
 ): SquadPlan {
-  return prototypeSquadPlanFactory.create(
-    roundNumber,
-    applyRecommendedPreset,
-  );
+  return totalBudgetOverride === undefined
+    ? prototypeSquadPlanFactory.create(roundNumber, applyRecommendedPreset)
+    : prototypeSquadPlanFactory.createWithBudget(
+        roundNumber,
+        totalBudgetOverride,
+        applyRecommendedPreset,
+      );
 }

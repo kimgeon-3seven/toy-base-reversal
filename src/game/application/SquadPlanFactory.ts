@@ -63,8 +63,20 @@ export class SquadPlanFactory {
   }
 
   public create(roundNumber: number, applyPreset = true): SquadPlan {
-    const plan = new MutableSquadPlan(
+    return this.createWithBudget(
+      roundNumber,
       this.sortiePointPolicy.pointsForRound(roundNumber),
+      applyPreset,
+    );
+  }
+
+  public createWithBudget(
+    roundNumber: number,
+    totalBudget: number,
+    applyPreset = true,
+  ): SquadPlan {
+    const plan = new MutableSquadPlan(
+      totalBudget,
       this.settings.simultaneousCapacityPerLane,
       this.settings.laneCount,
       this.settings.spawnIntervalMs,
