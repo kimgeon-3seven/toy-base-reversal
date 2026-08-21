@@ -1,0 +1,4 @@
+project_id = "toy-base-reversal"
+
+[functions.leaderboard]
+verify_jwt = false

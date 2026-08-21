@@ -118,6 +118,13 @@ export class PlayerRecord {
     };
   }
 
+  public rename(playerName: string): PlayerRecord {
+    const normalized = PlayerRecord.validatePlayerName(playerName);
+    return normalized === this.data.playerName
+      ? this
+      : new PlayerRecord({ ...this.data, playerName: normalized });
+  }
+
   public recordChallengeCompletion(
     round: number,
     attackTimeMs: number,

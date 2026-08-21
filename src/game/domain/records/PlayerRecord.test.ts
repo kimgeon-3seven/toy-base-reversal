@@ -71,4 +71,16 @@ describe('PlayerRecord', () => {
       }),
     ).toThrow('Challenge round must be a positive integer.');
   });
+
+  it('renames the player without losing best records', () => {
+    const source = PlayerRecord.create('로컬 플레이어').recordNormalCompletion(
+      120_000,
+      FIRST_DATE,
+    ).record;
+
+    const renamed = source.rename(' 장난감 대장 ');
+
+    expect(renamed.playerName).toBe('장난감 대장');
+    expect(renamed.normalBest).toEqual(source.normalBest);
+  });
 });

@@ -62,4 +62,16 @@ describe('GameRecordService', () => {
     expect(service.record.playerName).toBe('로컬 플레이어');
     expect(repository.saved).toBeNull();
   });
+
+  it('persists a renamed player without losing records', () => {
+    const repository = new InMemoryPlayerRecordRepository();
+    const service = new GameRecordService(repository);
+    service.recordNormalCompletion(120_000);
+
+    const renamed = service.renamePlayer('장난감 대장');
+
+    expect(renamed.playerName).toBe('장난감 대장');
+    expect(renamed.normalBest?.totalAttackTimeMs).toBe(120_000);
+    expect(repository.saved?.playerName).toBe('장난감 대장');
+  });
 });

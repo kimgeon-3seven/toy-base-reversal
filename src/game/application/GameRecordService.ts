@@ -41,6 +41,17 @@ export class GameRecordService {
     return this.apply(update);
   }
 
+  public renamePlayer(playerName: string): PlayerRecord {
+    const renamed = this.currentRecord.rename(playerName);
+    this.currentRecord = renamed;
+    try {
+      this.repository.save(renamed.snapshot);
+    } catch {
+      // The renamed identity still applies to the current session.
+    }
+    return renamed;
+  }
+
   public reset(playerName = this.currentRecord.playerName): PlayerRecord {
     try {
       this.repository.clear();

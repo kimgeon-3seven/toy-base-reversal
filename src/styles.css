@@ -21,6 +21,10 @@ body,
   overflow: hidden;
 }
 
+#app {
+  position: relative;
+}
+
 body {
   display: grid;
   place-items: center;
@@ -28,4 +32,82 @@ body {
 
 canvas {
   display: block;
+}
+
+.nickname-dialog-backdrop {
+  position: absolute;
+  inset: 0;
+  z-index: 1000;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: rgb(9 7 18 / 82%);
+}
+
+.nickname-dialog {
+  width: min(460px, 100%);
+  padding: 28px;
+  border: 2px solid #ffd166;
+  border-radius: 14px;
+  background: #262238;
+  box-shadow: 0 18px 60px rgb(0 0 0 / 45%);
+}
+
+.nickname-dialog h2,
+.nickname-dialog p {
+  margin: 0 0 14px;
+}
+
+.nickname-dialog h2 {
+  color: #ffd166;
+  font-size: 26px;
+}
+
+.nickname-dialog p {
+  color: #d9d3e8;
+  line-height: 1.5;
+}
+
+.nickname-dialog input {
+  width: 100%;
+  padding: 12px 14px;
+  border: 2px solid #554b78;
+  border-radius: 8px;
+  outline: none;
+  background: #171321;
+  color: #f8f4e8;
+  font: inherit;
+  font-size: 18px;
+}
+
+.nickname-dialog input:focus {
+  border-color: #9fe3c3;
+}
+
+.nickname-dialog .nickname-dialog-error {
+  min-height: 24px;
+  margin-top: 8px;
+  color: #ff7b8f;
+}
+
+.nickname-dialog-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+.nickname-dialog button {
+  padding: 10px 18px;
+  border: 1px solid #756b93;
+  border-radius: 8px;
+  background: #3a3450;
+  color: #f8f4e8;
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.nickname-dialog button[type='submit'] {
+  border-color: #9fe3c3;
+  background: #336b61;
 }

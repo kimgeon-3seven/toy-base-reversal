@@ -1,6 +1,10 @@
 import Phaser from 'phaser';
 import { DefenseEditor } from '../../application/DefenseEditor';
 import type { GameRecordService } from '../../application/GameRecordService';
+import type {
+  LeaderboardResult,
+  LeaderboardService,
+} from '../../application/LeaderboardService';
 import type { TutorialSequence } from '../../application/TutorialSequence';
 import {
   CORE_POSITION,
@@ -61,6 +65,7 @@ import { GridPosition } from '../../domain/grid/GridPosition';
 import { BreadthFirstPathfinder } from '../../domain/pathfinding/BreadthFirstPathfinder';
 import { RoundSession } from '../../domain/rounds/RoundSession';
 import type { PlayerRecord } from '../../domain/records/PlayerRecord';
+import type { NicknameEditor } from '../../ports/NicknameEditor';
 import type { StructureKind } from '../../domain/structures/DefenseStructure';
 
 const TOWER_COLORS: Readonly<Record<TowerArchetype, number>> = {
@@ -109,6 +114,13 @@ export class BattlefieldScene extends Phaser.Scene {
   private playerRecord!: PlayerRecord;
   private recordResetArmedUntil = 0;
   private latestRecordNotice = '';
+  private leaderboardOverlay!: Phaser.GameObjects.Container;
+  private leaderboardStatusText!: Phaser.GameObjects.Text;
+  private leaderboardRowsText!: Phaser.GameObjects.Text;
+  private leaderboardPlayerText!: Phaser.GameObjects.Text;
+  private isLeaderboardOpen = false;
+  private isNicknameDialogOpen = false;
+  private leaderboardRequestId = 0;
   private activeKind: StructureKind = 'tower';
   private activeTowerArchetype: TowerArchetype = 'popgun';
   private selectedStructureId: string | null = null;
@@ -130,7 +142,11 @@ export class BattlefieldScene extends Phaser.Scene {
     right: Phaser.Input.Keyboard.Key;
   };
 
-  public constructor(private readonly gameRecordService: GameRecordService) {
+  public constructor(
+    private readonly gameRecordService: GameRecordService,
+    private readonly leaderboardService: LeaderboardService,
+    private readonly nicknameEditor: NicknameEditor,
+  ) {
     super({ key: 'BattlefieldScene' });
   }
 
@@ -139,6 +155,9 @@ export class BattlefieldScene extends Phaser.Scene {
     this.playerRecord = this.gameRecordService.record;
     this.recordResetArmedUntil = 0;
     this.latestRecordNotice = '';
+    this.isLeaderboardOpen = false;
+    this.isNicknameDialogOpen = false;
+    this.leaderboardRequestId = 0;
     this.tutorial = createPrototypeTutorial();
     this.phase = 'tutorial';
     this.preparationRemainingMs = PREPARATION_DURATION_MS;
@@ -176,6 +195,7 @@ export class BattlefieldScene extends Phaser.Scene {
     this.enemyGraphics = this.add.graphics();
     this.attackerGraphics = this.add.graphics();
     this.createTutorialOverlay();
+    this.createLeaderboardOverlay();
 
     this.input.on('pointerdown', (pointer: Phaser.Input.Pointer) => {
       this.handlePointerDown(pointer);
@@ -188,6 +208,8 @@ export class BattlefieldScene extends Phaser.Scene {
   }
 
   public update(_time: number, delta: number): void {
+    if (this.isLeaderboardOpen || this.isNicknameDialogOpen) return;
+
     if (this.phase === 'preparation') {
       this.preparationRemainingMs = Math.max(
         0,
@@ -414,12 +436,13 @@ export class BattlefieldScene extends Phaser.Scene {
       .text(
         0,
         212,
-        '[Enter] 다음    [Esc] 안내 건너뛰기    [L] 기록 초기화(두 번)',
+        '[Enter] 다음  [Esc] 건너뛰기  [Tab] 순위표  [N] 닉네임\n[L] 기록 초기화(두 번)',
         {
-        align: 'center',
-        color: '#d9d3e8',
-        fontFamily: 'Arial, sans-serif',
-        fontSize: '17px',
+          align: 'center',
+          color: '#d9d3e8',
+          fontFamily: 'Arial, sans-serif',
+          fontSize: '17px',
+          lineSpacing: 5,
         },
       )
       .setOrigin(0.5);
@@ -436,6 +459,76 @@ export class BattlefieldScene extends Phaser.Scene {
         controlText,
       ])
       .setDepth(100);
+  }
+
+  private createLeaderboardOverlay(): void {
+    const backdrop = this.add.rectangle(
+      0,
+      0,
+      GAME_WIDTH,
+      GAME_HEIGHT,
+      0x090712,
+      0.9,
+    );
+    const panel = this.add
+      .rectangle(0, 0, 900, 650, 0x262238, 1)
+      .setStrokeStyle(3, 0x9fe3c3, 0.95);
+    const title = this.add
+      .text(-390, -280, '온라인 챌린지 순위표', {
+        color: GAME_COLORS.primary,
+        fontFamily: 'Arial, sans-serif',
+        fontSize: '32px',
+        fontStyle: 'bold',
+      });
+    const rule = this.add
+      .text(-390, -230, '높은 라운드 우선 · 같은 라운드는 짧은 돌파시간 우선', {
+        color: '#d9d3e8',
+        fontFamily: 'Arial, sans-serif',
+        fontSize: '17px',
+      });
+    this.leaderboardStatusText = this.add
+      .text(-390, -190, '', {
+        color: GAME_COLORS.secondary,
+        fontFamily: 'Arial, sans-serif',
+        fontSize: '18px',
+      });
+    this.leaderboardRowsText = this.add
+      .text(-360, -140, '', {
+        color: GAME_COLORS.text,
+        fontFamily: 'Consolas, monospace',
+        fontSize: '20px',
+        lineSpacing: 9,
+      });
+    this.leaderboardPlayerText = this.add
+      .text(-390, 220, '', {
+        backgroundColor: '#171321',
+        color: GAME_COLORS.primary,
+        fontFamily: 'Arial, sans-serif',
+        fontSize: '19px',
+        fontStyle: 'bold',
+        padding: { x: 18, y: 12 },
+      });
+    const controls = this.add
+      .text(0, 286, '[Tab / Esc] 닫기    [N] 닉네임 변경', {
+        color: '#d9d3e8',
+        fontFamily: 'Arial, sans-serif',
+        fontSize: '17px',
+      })
+      .setOrigin(0.5);
+
+    this.leaderboardOverlay = this.add
+      .container(GAME_WIDTH / 2, GAME_HEIGHT / 2, [
+        backdrop,
+        panel,
+        title,
+        rule,
+        this.leaderboardStatusText,
+        this.leaderboardRowsText,
+        this.leaderboardPlayerText,
+        controls,
+      ])
+      .setDepth(120)
+      .setVisible(false);
   }
 
   private renderTutorialStep(): void {
@@ -480,7 +573,127 @@ export class BattlefieldScene extends Phaser.Scene {
     this.renderBattlefield();
   }
 
+  private toggleLeaderboard(): void {
+    if (this.isLeaderboardOpen) {
+      this.isLeaderboardOpen = false;
+      this.leaderboardOverlay.setVisible(false);
+      return;
+    }
+    if (this.phase === 'combat' || this.phase === 'attack-combat') {
+      this.setStatus('전투 중에는 온라인 순위표를 열 수 없습니다.', true);
+      return;
+    }
+
+    this.isLeaderboardOpen = true;
+    this.leaderboardOverlay.setVisible(true);
+    this.leaderboardStatusText
+      .setColor(GAME_COLORS.secondary)
+      .setText('순위표를 불러오는 중입니다...');
+    this.leaderboardRowsText.setText('');
+    this.leaderboardPlayerText.setText(
+      `${this.playerRecord.playerName} · 로컬 ${this.challengeBestText()}`,
+    );
+    void this.refreshLeaderboard();
+  }
+
+  private async refreshLeaderboard(): Promise<void> {
+    const requestId = ++this.leaderboardRequestId;
+    const result = await this.leaderboardService.load();
+    if (!this.isLeaderboardOpen || requestId !== this.leaderboardRequestId) {
+      return;
+    }
+    this.renderLeaderboardResult(result);
+  }
+
+  private renderLeaderboardResult(result: LeaderboardResult): void {
+    this.leaderboardStatusText
+      .setColor(
+        result.status === 'online' ? GAME_COLORS.secondary : '#ffb86b',
+      )
+      .setText(result.message);
+    const entries = result.leaderboard?.topEntries ?? [];
+    this.leaderboardRowsText.setText(
+      entries.length === 0
+        ? '아직 표시할 온라인 기록이 없습니다.'
+        : [
+            '순위  지휘관             라운드   돌파시간',
+            ...entries.map(
+              (entry) =>
+                `${String(entry.rank).padStart(2)}위  ${this.truncateNickname(entry.playerName).padEnd(16)} ${String(entry.challengeRound).padStart(3)}R   ${this.formatTime(entry.attackTimeMs).padStart(7)}`,
+            ),
+          ].join('\n'),
+    );
+    const current = result.leaderboard?.currentPlayerEntry;
+    this.leaderboardPlayerText.setText(
+      current === null || current === undefined
+        ? `${this.playerRecord.playerName} · 온라인 등록 기록 없음\n로컬 ${this.challengeBestText()}`
+        : `내 순위 ${current.rank}위 · ${current.challengeRound}R · ${this.formatTime(current.attackTimeMs)}\n닉네임 ${current.playerName}`,
+    );
+  }
+
+  private truncateNickname(nickname: string): string {
+    return nickname.length <= 14 ? nickname : `${nickname.slice(0, 13)}…`;
+  }
+
+  private async requestNicknameChange(): Promise<void> {
+    if (this.isNicknameDialogOpen) return;
+    if (this.phase === 'combat' || this.phase === 'attack-combat') {
+      this.setStatus('전투 중에는 닉네임을 변경할 수 없습니다.', true);
+      return;
+    }
+
+    this.isNicknameDialogOpen = true;
+    const nickname = await this.nicknameEditor.requestNickname(
+      this.playerRecord.playerName,
+    );
+    this.isNicknameDialogOpen = false;
+    if (nickname === null) return;
+
+    try {
+      this.playerRecord = this.gameRecordService.renamePlayer(nickname);
+      this.setStatus(`닉네임을 ${this.playerRecord.playerName}(으)로 저장했습니다.`);
+      if (this.phase === 'tutorial') this.renderTutorialStep();
+      else this.updatePhaseInterface();
+      const best = this.playerRecord.challengeBest;
+      if (best !== null) {
+        const result = await this.leaderboardService.submitChallengeBest(
+          this.playerRecord.playerName,
+          best,
+        );
+        if (this.isLeaderboardOpen) this.renderLeaderboardResult(result);
+      }
+    } catch {
+      this.setStatus('닉네임은 공백 제외 1~24자로 입력하세요.', true);
+    }
+  }
+
   private configureKeyboardInput(): void {
+    this.input.keyboard?.on('keydown', (event: KeyboardEvent) => {
+      if (this.isLeaderboardOpen && event.code === 'Escape') {
+        event.preventDefault();
+        event.stopImmediatePropagation();
+        this.toggleLeaderboard();
+        return;
+      }
+      if (
+        (this.isLeaderboardOpen || this.isNicknameDialogOpen) &&
+        event.code !== 'Tab' &&
+        event.code !== 'KeyN'
+      ) {
+        event.stopImmediatePropagation();
+      }
+    });
+
+    this.input.keyboard?.on('keydown-TAB', (event: KeyboardEvent) => {
+      event.preventDefault();
+      if (!this.isNicknameDialogOpen) this.toggleLeaderboard();
+    });
+
+    this.input.keyboard?.on('keydown-N', () => {
+      if (this.isLeaderboardOpen) this.toggleLeaderboard();
+      void this.requestNicknameChange();
+    });
+
     this.input.keyboard?.on('keydown-ONE', () => {
       if (this.phase === 'attack-preparation') {
         this.selectAttackUnit('tank');
@@ -789,6 +1002,8 @@ export class BattlefieldScene extends Phaser.Scene {
   }
 
   private handlePointerDown(pointer: Phaser.Input.Pointer): void {
+    if (this.isLeaderboardOpen || this.isNicknameDialogOpen) return;
+
     if (this.phase === 'attack-combat' && this.isFocusTargeting) {
       this.handleFocusTargetPointer(pointer);
       return;
@@ -1560,6 +1775,7 @@ export class BattlefieldScene extends Phaser.Scene {
       this.latestRecordNotice = recordUpdate.isNewBest
         ? '신기록! 개인 최고 기록을 브라우저에 저장했습니다.'
         : `개인 최고: ${this.challengeBestText()}`;
+      if (recordUpdate.isNewBest) void this.submitCurrentChallengeBest();
     }
     const failure =
       this.attackCombat.failureReason === 'commander-defeated'
@@ -1583,6 +1799,24 @@ export class BattlefieldScene extends Phaser.Scene {
     );
     this.updatePhaseInterface();
     this.renderBattlefield();
+  }
+
+  private async submitCurrentChallengeBest(): Promise<void> {
+    const best = this.playerRecord.challengeBest;
+    if (best === null) return;
+    const result = await this.leaderboardService.submitChallengeBest(
+      this.playerRecord.playerName,
+      best,
+    );
+    if (result.status === 'online') {
+      const rank = result.leaderboard?.currentPlayerEntry?.rank;
+      this.setStatus(
+        rank === undefined
+          ? '개인 신기록을 온라인 순위표에 제출했습니다.'
+          : `개인 신기록을 온라인 순위표에 제출했습니다. 현재 ${rank}위입니다.`,
+      );
+    }
+    if (this.isLeaderboardOpen) this.renderLeaderboardResult(result);
   }
 
   private resetToPreparation(): void {
@@ -1678,7 +1912,7 @@ export class BattlefieldScene extends Phaser.Scene {
         `준비 시간 일시 정지\n${this.personalRecordSummary()}`,
       );
       this.helpText.setText(
-        '핵심 흐름\n\n1. 방어선 설계\n2. 자동 방어 전투\n3. 공격 부대 편성\n4. 내 방어선 돌파\n\n[Enter] 다음  [Esc] 건너뛰기\n[L] 개인 기록 초기화(두 번)',
+        '핵심 흐름\n\n1. 방어선 설계\n2. 자동 방어 전투\n3. 공격 부대 편성\n4. 내 방어선 돌파\n\n[Tab] 순위표  [N] 닉네임\n[L] 개인 기록 초기화(두 번)',
       );
       return;
     }
@@ -1692,7 +1926,9 @@ export class BattlefieldScene extends Phaser.Scene {
           '다음: 챌린지 모드',
         ].join('\n'),
       );
-      this.helpText.setText('[Enter] 챌린지 시작\n[R] 일반 모드 다시 시작');
+      this.helpText.setText(
+        '[Enter] 챌린지 시작\n[R] 일반 모드 다시 시작\n[Tab] 순위표  [N] 닉네임',
+      );
       return;
     }
 
@@ -1851,8 +2087,7 @@ export class BattlefieldScene extends Phaser.Scene {
       '[S] 설계 저장  [R] 복원',
       '[Space] 방어전 시작',
       '',
-      '세 색상의 선은 각 진입로의',
-      '최단 이동 경로입니다.',
+      '[Tab] 순위표  [N] 닉네임',
     ].join('\n');
   }
 
@@ -1869,6 +2104,7 @@ export class BattlefieldScene extends Phaser.Scene {
       '[X] 전체 비우기  [P] 추천 편성',
       '[C] 지휘관 진입로 변경',
       '[Space] 공격 시작',
+      '[Tab] 순위표  [N] 닉네임',
       '',
       `진입로별 처음 ${SIMULTANEOUS_CAPACITY_PER_LANE}명은 동시에`,
       `나머지는 ${SQUAD_SPAWN_INTERVAL_MS / 1000}초 간격 출격합니다.`,
