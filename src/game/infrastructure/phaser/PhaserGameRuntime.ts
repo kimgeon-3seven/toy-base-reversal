@@ -1,4 +1,5 @@
 import Phaser from 'phaser';
+import { FirstRunGuideService } from '../../application/FirstRunGuideService';
 import { GameRecordService } from '../../application/GameRecordService';
 import { LeaderboardService } from '../../application/LeaderboardService';
 import { GAME_HEIGHT, GAME_WIDTH } from '../../config/GameConfig';
@@ -7,6 +8,7 @@ import { BootScene } from '../../presentation/scenes/BootScene';
 import { BattlefieldScene } from '../../presentation/scenes/BattlefieldScene';
 import { DomNicknameEditor } from '../dom/DomNicknameEditor';
 import { LeaderboardRepositoryFactory } from '../http/LeaderboardRepositoryFactory';
+import { LocalStorageFirstRunGuideRepository } from '../storage/LocalStorageFirstRunGuideRepository';
 import { LocalStoragePlayerIdentityProvider } from '../storage/LocalStoragePlayerIdentityProvider';
 import { LocalStoragePlayerRecordRepository } from '../storage/LocalStoragePlayerRecordRepository';
 
@@ -37,6 +39,9 @@ export class PhaserGameRuntime implements GameRuntime {
       leaderboardRepository,
       playerIdentity,
     );
+    const firstRunGuideService = new FirstRunGuideService(
+      new LocalStorageFirstRunGuideRepository(window.localStorage),
+    );
     const parent = document.getElementById(this.parentId);
     if (parent === null) {
       throw new Error(`Game parent element #${this.parentId} was not found.`);
@@ -59,7 +64,12 @@ export class PhaserGameRuntime implements GameRuntime {
       },
       scene: [
         BootScene,
-        new BattlefieldScene(recordService, leaderboardService, nicknameEditor),
+        new BattlefieldScene(
+          recordService,
+          leaderboardService,
+          nicknameEditor,
+          firstRunGuideService,
+        ),
       ],
     });
   }
