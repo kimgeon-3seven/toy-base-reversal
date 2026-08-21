@@ -38,6 +38,17 @@ pnpm check
 
 게임 시작 시 장난감 전쟁의 핵심인 `방어 → 역할 반전 → 내 기지 돌파`를 한 화면으로 소개합니다. 최초 플레이에서는 필요한 규칙을 방어 준비, 방어 전투, 공격 준비, 지휘관 조작 시점에 차례로 안내하며 이후 실행에서는 짧은 시작 화면만 표시합니다. `Esc`로 상세 안내를 건너뛸 수 있고, 방어 준비 중 `H`를 누르면 언제든 첫 안내를 다시 볼 수 있습니다. 시작 화면에는 브라우저에 저장된 개인 최고 기록도 표시됩니다.
 
+`M` 키로 배경음악과 효과음을 함께 켜거나 끌 수 있습니다. 브라우저의 자동 재생 정책에 맞춰 첫 키보드 또는 포인터 입력 이후 배경음악이 시작됩니다.
+
+## 아트와 사운드
+
+- Kenney Tower Defense (Top-Down) 기반의 타워·유닛·장애물 아트
+- Kenney Particle Pack과 Smoke Particles 기반의 투사체·피격·파괴·능력 연출
+- Kenney Interface Sounds, Impact Sounds, Digital Audio 기반의 UI·전투 효과음
+- OpenGameArt의 CC0 트랙 `Loop Town` 배경음악
+
+사용한 원본과 라이선스는 [`THIRD_PARTY_ASSETS.md`](./THIRD_PARTY_ASSETS.md)에 정리되어 있습니다.
+
 ### 방어 준비 및 전투
 
 - `1`: 팝건 포탑(건설 부품 3) — 고무줄 사수에게 강함

@@ -2,6 +2,7 @@ import type { Battlefield } from '../battlefield/Battlefield';
 import { GridPosition } from '../grid/GridPosition';
 import type { DefenseStructure } from '../structures/DefenseStructure';
 import type { TowerUpgradePolicy } from '../structures/TowerUpgradePolicy';
+import type { CombatEvent } from '../combat/CombatEvent';
 import {
   towerDamageMultiplier,
   unitDamageMultiplier,
@@ -100,6 +101,7 @@ export class AttackCombat {
   private currentFocusTargetId: string | null = null;
   private readonly focusedUnitIds = new Set<string>();
   private readonly unitPathStepCache = new Map<string, UnitPathStepCache>();
+  private readonly pendingEvents: CombatEvent[] = [];
 
   public readonly commander: AttackCommander;
 
@@ -180,6 +182,10 @@ export class AttackCombat {
       towerId,
       remainingMs,
     }));
+  }
+
+  public drainEvents(): readonly CombatEvent[] {
+    return this.pendingEvents.splice(0);
   }
 
   public isUnitFocused(unitId: string): boolean {
@@ -418,6 +424,18 @@ export class AttackCombat {
             multiplier,
         );
       }
+      this.pendingEvents.push({
+        type: 'attack',
+        style: towerArchetype,
+        source: {
+          column: tower.position.column,
+          row: tower.position.row,
+        },
+        target: {
+          column: target.column,
+          row: target.row,
+        },
+      });
       this.towerCooldowns.set(tower.id, towerStats.attackIntervalMs);
     }
   }
@@ -442,6 +460,18 @@ export class AttackCombat {
             unit.stats.attackDamage *
               unitDamageMultiplier(unit.kind, target.towerArchetype),
           );
+          this.pendingEvents.push({
+            type: 'attack',
+            style: 'unit',
+            source: {
+              column: unit.renderColumn,
+              row: unit.renderRow,
+            },
+            target: {
+              column: target.position.column,
+              row: target.position.row,
+            },
+          });
           unit.consumeAttack();
         }
         continue;
@@ -462,6 +492,25 @@ export class AttackCombat {
             0,
             this.currentCoreHealth - unit.stats.attackDamage,
           );
+          this.pendingEvents.push({
+            type: 'attack',
+            style: 'unit',
+            source: {
+              column: unit.renderColumn,
+              row: unit.renderRow,
+            },
+            target: {
+              column: this.battlefield.map.corePosition.column,
+              row: this.battlefield.map.corePosition.row,
+            },
+          });
+          this.pendingEvents.push({
+            type: 'core-hit',
+            position: {
+              column: this.battlefield.map.corePosition.column,
+              row: this.battlefield.map.corePosition.row,
+            },
+          });
           unit.consumeAttack();
         }
         continue;
@@ -506,6 +555,18 @@ export class AttackCombat {
           unit.stats.attackDamage *
             unitDamageMultiplier(unit.kind, target.towerArchetype),
         );
+        this.pendingEvents.push({
+          type: 'attack',
+          style: 'unit',
+          source: {
+            column: unit.renderColumn,
+            row: unit.renderRow,
+          },
+          target: {
+            column: target.position.column,
+            row: target.position.row,
+          },
+        });
         unit.consumeAttack();
       }
       return true;
@@ -536,6 +597,18 @@ export class AttackCombat {
     );
     if (target !== null) {
       target.takeDamage(this.commander.attackDamage);
+      this.pendingEvents.push({
+        type: 'attack',
+        style: 'commander',
+        source: {
+          column: this.commander.position.column,
+          row: this.commander.position.row,
+        },
+        target: {
+          column: target.position.column,
+          row: target.position.row,
+        },
+      });
       this.commander.consumeAttack();
       return;
     }
@@ -549,6 +622,25 @@ export class AttackCombat {
         0,
         this.currentCoreHealth - this.commander.attackDamage,
       );
+      this.pendingEvents.push({
+        type: 'attack',
+        style: 'commander',
+        source: {
+          column: this.commander.position.column,
+          row: this.commander.position.row,
+        },
+        target: {
+          column: this.battlefield.map.corePosition.column,
+          row: this.battlefield.map.corePosition.row,
+        },
+      });
+      this.pendingEvents.push({
+        type: 'core-hit',
+        position: {
+          column: this.battlefield.map.corePosition.column,
+          row: this.battlefield.map.corePosition.row,
+        },
+      });
       this.commander.consumeAttack();
     }
   }
@@ -633,6 +725,14 @@ export class AttackCombat {
   private removeDefeatedUnits(): void {
     for (const unit of this.units) {
       if (!unit.isAlive) {
+        this.pendingEvents.push({
+          type: 'destroyed',
+          targetKind: 'unit',
+          position: {
+            column: unit.renderColumn,
+            row: unit.renderRow,
+          },
+        });
         this.unitsById.delete(unit.id);
         this.focusedUnitIds.delete(unit.id);
         this.unitPathStepCache.delete(unit.id);
@@ -645,6 +745,14 @@ export class AttackCombat {
     let structureWasDestroyed = false;
     for (const structure of this.battlefield.structures) {
       if (structure.health === 0) {
+        this.pendingEvents.push({
+          type: 'destroyed',
+          targetKind: 'structure',
+          position: {
+            column: structure.position.column,
+            row: structure.position.row,
+          },
+        });
         this.battlefield.destroy(structure.id);
         structureWasDestroyed = true;
         this.towerCooldowns.delete(structure.id);

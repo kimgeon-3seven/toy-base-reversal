@@ -7,6 +7,7 @@ import {
   unitDamageMultiplier,
   type TowerArchetype,
 } from './CombatArchetype';
+import type { CombatEvent } from './CombatEvent';
 import type { CoreLeakDamagePolicy } from './CoreLeakDamagePolicy';
 import { DefenseEnemy } from './DefenseEnemy';
 import type { DefenseWave } from './DefenseWave';
@@ -38,6 +39,7 @@ export class DefenseCombat {
   private defeatedEnemies = 0;
   private breachedEnemies = 0;
   private appliedCoreLeakDamage = 0;
+  private readonly pendingEvents: CombatEvent[] = [];
 
   public constructor(
     public readonly battlefield: Battlefield,
@@ -90,6 +92,10 @@ export class DefenseCombat {
 
   public get remainingSpawnCount(): number {
     return this.wave.spawns.length - this.nextSpawnIndex;
+  }
+
+  public drainEvents(): readonly CombatEvent[] {
+    return this.pendingEvents.splice(0);
   }
 
   public update(deltaMs: number): void {
@@ -183,6 +189,18 @@ export class DefenseCombat {
             towerDamageMultiplier(towerArchetype, enemy.stats.archetype),
         );
       }
+      this.pendingEvents.push({
+        type: 'attack',
+        style: towerArchetype,
+        source: {
+          column: tower.position.column,
+          row: tower.position.row,
+        },
+        target: {
+          column: target.renderColumn,
+          row: target.renderRow,
+        },
+      });
       this.towerCooldowns.set(tower.id, towerStats.attackIntervalMs);
     }
   }
@@ -251,8 +269,28 @@ export class DefenseCombat {
       enemy.stats.attackDamage *
         unitDamageMultiplier(enemy.stats.archetype, structure.towerArchetype),
     );
+    this.pendingEvents.push({
+      type: 'attack',
+      style: 'unit',
+      source: {
+        column: enemy.renderColumn,
+        row: enemy.renderRow,
+      },
+      target: {
+        column: structure.position.column,
+        row: structure.position.row,
+      },
+    });
     enemy.consumeAttack();
     if (structure.health === 0) {
+      this.pendingEvents.push({
+        type: 'destroyed',
+        targetKind: 'structure',
+        position: {
+          column: structure.position.column,
+          row: structure.position.row,
+        },
+      });
       this.battlefield.destroy(structure.id);
       this.towerCooldowns.delete(structure.id);
     }
@@ -270,6 +308,13 @@ export class DefenseCombat {
     );
     this.appliedCoreLeakDamage += appliedDamage;
     this.breachedEnemies += 1;
+    this.pendingEvents.push({
+      type: 'core-hit',
+      position: {
+        column: this.battlefield.map.corePosition.column,
+        row: this.battlefield.map.corePosition.row,
+      },
+    });
     this.enemiesById.delete(enemy.id);
   }
 
@@ -297,6 +342,14 @@ export class DefenseCombat {
         continue;
       }
 
+      this.pendingEvents.push({
+        type: 'destroyed',
+        targetKind: 'unit',
+        position: {
+          column: enemy.renderColumn,
+          row: enemy.renderRow,
+        },
+      });
       this.enemiesById.delete(enemy.id);
       this.defeatedEnemies += 1;
     }

@@ -333,4 +333,21 @@ describe('AttackCombat', () => {
     expect(combat.focusTargetId).toBeNull();
     expect(combat.focusedUnitCount).toBe(0);
   });
+
+  it('publishes projectile and core-hit events once for presentation feedback', () => {
+    const field = battlefield();
+    const plan = new SquadPlan(10, 2, 1);
+    plan.addUnit(0, 'tank');
+    const combat = new AttackCombat(field, plan, config);
+
+    combat.update(3_000);
+
+    expect(combat.drainEvents()).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ type: 'attack', style: 'unit' }),
+        expect.objectContaining({ type: 'core-hit' }),
+      ]),
+    );
+    expect(combat.drainEvents()).toEqual([]);
+  });
 });

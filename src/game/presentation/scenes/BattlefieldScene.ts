@@ -68,18 +68,10 @@ import { RoundSession } from '../../domain/rounds/RoundSession';
 import type { PlayerRecord } from '../../domain/records/PlayerRecord';
 import type { NicknameEditor } from '../../ports/NicknameEditor';
 import type { StructureKind } from '../../domain/structures/DefenseStructure';
-
-const TOWER_COLORS: Readonly<Record<TowerArchetype, number>> = {
-  popgun: 0xffc857,
-  mortar: 0xff8c61,
-  piercer: 0x8bd17c,
-};
-
-const UNIT_COLORS: Readonly<Record<AttackUnitKind, number>> = {
-  tank: 0x5da9e9,
-  swarm: 0xffd166,
-  ranger: 0xf4a6d7,
-};
+import type { CombatEvent } from '../../domain/combat/CombatEvent';
+import { BattlefieldSpriteRenderer } from '../rendering/BattlefieldSpriteRenderer';
+import { BattlefieldEffects } from '../effects/BattlefieldEffects';
+import { BattlefieldAudioDirector } from '../audio/BattlefieldAudioDirector';
 
 const PATH_COLORS = [0x59c3c3, 0xff8c61, 0x8bd17c] as const;
 type DefenseScenePhase =
@@ -100,6 +92,9 @@ export class BattlefieldScene extends Phaser.Scene {
   private structureGraphics!: Phaser.GameObjects.Graphics;
   private enemyGraphics!: Phaser.GameObjects.Graphics;
   private attackerGraphics!: Phaser.GameObjects.Graphics;
+  private spriteRenderer!: BattlefieldSpriteRenderer;
+  private effects!: BattlefieldEffects;
+  private audioDirector!: BattlefieldAudioDirector;
   private statusText!: Phaser.GameObjects.Text;
   private selectionText!: Phaser.GameObjects.Text;
   private phaseText!: Phaser.GameObjects.Text;
@@ -204,11 +199,21 @@ export class BattlefieldScene extends Phaser.Scene {
     this.structureGraphics = this.add.graphics();
     this.enemyGraphics = this.add.graphics();
     this.attackerGraphics = this.add.graphics();
+    this.pathGraphics.setDepth(4);
+    this.boardGraphics.setDepth(3);
+    this.structureGraphics.setDepth(30);
+    this.enemyGraphics.setDepth(31);
+    this.attackerGraphics.setDepth(32);
+    this.spriteRenderer = new BattlefieldSpriteRenderer(this);
+    this.effects = new BattlefieldEffects(this);
+    this.audioDirector = new BattlefieldAudioDirector(this);
     this.createTutorialOverlay();
     this.createGuideCoachMark();
     this.createLeaderboardOverlay();
 
     this.input.on('pointerdown', (pointer: Phaser.Input.Pointer) => {
+      this.audioDirector.startMusic();
+      this.audioDirector.playUi('click');
       this.handlePointerDown(pointer);
     });
 
@@ -248,6 +253,7 @@ export class BattlefieldScene extends Phaser.Scene {
     if (this.phase === 'attack-combat' && this.attackCombat !== null) {
       this.handleCommanderMovement();
       this.attackCombat.update(delta);
+      this.presentCombatEvents(this.attackCombat.drainEvents());
       this.renderBattlefield();
       this.updatePhaseInterface();
       if (this.attackCombat.state !== 'running') {
@@ -261,6 +267,7 @@ export class BattlefieldScene extends Phaser.Scene {
     }
 
     this.combat.update(delta);
+    this.presentCombatEvents(this.combat.drainEvents());
     this.renderBattlefield();
     this.updatePhaseInterface();
 
@@ -771,6 +778,7 @@ export class BattlefieldScene extends Phaser.Scene {
 
   private configureKeyboardInput(): void {
     this.input.keyboard?.on('keydown', (event: KeyboardEvent) => {
+      this.audioDirector.startMusic();
       if (this.isLeaderboardOpen && event.code === 'Escape') {
         event.preventDefault();
         event.stopImmediatePropagation();
@@ -794,6 +802,11 @@ export class BattlefieldScene extends Phaser.Scene {
     this.input.keyboard?.on('keydown-N', () => {
       if (this.isLeaderboardOpen) this.toggleLeaderboard();
       void this.requestNicknameChange();
+    });
+
+    this.input.keyboard?.on('keydown-M', () => {
+      const muted = this.audioDirector.toggleMute();
+      this.setStatus(muted ? '모든 소리를 껐습니다.' : '효과음과 배경음악을 켰습니다.');
     });
 
     this.input.keyboard?.on('keydown-ONE', () => {
@@ -1207,6 +1220,11 @@ export class BattlefieldScene extends Phaser.Scene {
       this.setStatus(
         `집중 공격! 지휘관 주변 ${result.unitCount}명이 선택한 타워를 우선 공격합니다.`,
       );
+      this.audioDirector.playAbility('focus');
+      this.effects.playAbility(
+        { column: target.position.column, row: target.position.row },
+        'focus',
+      );
       this.renderGuideCoachMark();
       this.renderBattlefield();
       return;
@@ -1252,6 +1270,11 @@ export class BattlefieldScene extends Phaser.Scene {
           ? '타워'
           : TOWER_NAMES[target.towerArchetype];
       this.setStatus(`교란 성공! ${towerName}의 공격과 대기시간을 정지했습니다.`);
+      this.audioDirector.playAbility('disrupt');
+      this.effects.playAbility(
+        { column: target.position.column, row: target.position.row },
+        'disrupt',
+      );
       this.renderGuideCoachMark();
       this.renderBattlefield();
       return;
@@ -1371,14 +1394,16 @@ export class BattlefieldScene extends Phaser.Scene {
       this.phase === 'attack-combat' || this.phase === 'attack-result'
         ? (this.attackCombat?.coreHealthRatio ?? 1)
         : (this.combat?.coreHealthRatio ?? 1);
-    this.boardGraphics.fillStyle(coreRatio > 0.4 ? 0x8bd17c : 0xff6b6b, 1);
-    this.boardGraphics.fillCircle(coreCenter.x, coreCenter.y, 17);
+    this.spriteRenderer.renderCore(CORE_POSITION.column, CORE_POSITION.row, coreRatio);
+    this.boardGraphics.fillStyle(coreRatio > 0.4 ? 0x8bd17c : 0xff6b6b, 0.22);
+    this.boardGraphics.fillCircle(coreCenter.x, coreCenter.y, 23);
     this.boardGraphics.lineStyle(3, 0xd8ffd0, 1);
-    this.boardGraphics.strokeCircle(coreCenter.x, coreCenter.y, 17);
+    this.boardGraphics.strokeCircle(coreCenter.x, coreCenter.y, 23);
   }
 
   private renderStructures(): void {
     this.structureGraphics.clear();
+    this.spriteRenderer.renderStructures(this.editor.battlefield.structures);
 
     for (const structure of this.editor.battlefield.structures) {
       const center = this.gridCenter(structure.position);
@@ -1394,48 +1419,6 @@ export class BattlefieldScene extends Phaser.Scene {
         this.isDisruptTargeting &&
         structure.kind === 'tower' &&
         !isDisruptCandidate;
-
-      if (structure.kind === 'tower' && structure.towerArchetype !== null) {
-        this.structureGraphics.fillStyle(
-          TOWER_COLORS[structure.towerArchetype],
-          1,
-        );
-        if (structure.towerArchetype === 'mortar') {
-          this.structureGraphics.fillRoundedRect(
-            center.x - 16,
-            center.y - 16,
-            32,
-            32,
-            5,
-          );
-          this.structureGraphics.fillStyle(0x5c3028, 1);
-          this.structureGraphics.fillCircle(center.x, center.y, 8);
-        } else if (structure.towerArchetype === 'piercer') {
-          this.structureGraphics.fillTriangle(
-            center.x,
-            center.y - 19,
-            center.x - 18,
-            center.y + 16,
-            center.x + 18,
-            center.y + 16,
-          );
-          this.structureGraphics.fillStyle(0x29452c, 1);
-          this.structureGraphics.fillRect(center.x - 3, center.y - 24, 6, 24);
-        } else {
-        this.structureGraphics.fillCircle(center.x, center.y, 15);
-        this.structureGraphics.fillStyle(0x4a3a20, 1);
-        this.structureGraphics.fillRect(center.x - 4, center.y - 22, 8, 15);
-        }
-      } else {
-        this.structureGraphics.fillStyle(0xb8a1d9, 1);
-        this.structureGraphics.fillRoundedRect(
-          center.x - 17,
-          center.y - 17,
-          34,
-          34,
-          7,
-        );
-      }
 
       if (isSelected) {
         this.structureGraphics.lineStyle(4, 0xffffff, 1);
@@ -1552,8 +1535,10 @@ export class BattlefieldScene extends Phaser.Scene {
   private renderEnemies(): void {
     this.enemyGraphics.clear();
     if (this.combat === null) {
+      this.spriteRenderer.renderDefenders([]);
       return;
     }
+    this.spriteRenderer.renderDefenders(this.combat.enemies);
 
     for (const enemy of this.combat.enemies) {
       const x =
@@ -1562,30 +1547,6 @@ export class BattlefieldScene extends Phaser.Scene {
         GRID_CELL_SIZE / 2;
       const y =
         GRID_OFFSET_Y + enemy.renderRow * GRID_CELL_SIZE + GRID_CELL_SIZE / 2;
-
-      if (enemy.stats.archetype === 'tank') {
-        this.enemyGraphics.fillStyle(0xd95f76, 1);
-        this.enemyGraphics.fillRoundedRect(x - 16, y - 14, 32, 28, 7);
-        this.enemyGraphics.lineStyle(3, 0xffd6d6, 1);
-        this.enemyGraphics.strokeRect(x - 13, y - 11, 26, 22);
-      } else if (enemy.stats.archetype === 'swarm') {
-        this.enemyGraphics.fillStyle(0xffa85c, 1);
-        this.enemyGraphics.fillCircle(x - 7, y + 3, 8);
-        this.enemyGraphics.fillCircle(x + 7, y + 3, 8);
-        this.enemyGraphics.fillCircle(x, y - 7, 8);
-      } else {
-        this.enemyGraphics.fillStyle(0xe98bb5, 1);
-        this.enemyGraphics.fillTriangle(
-          x - 13,
-          y - 12,
-          x - 13,
-          y + 12,
-          x + 14,
-          y,
-        );
-        this.enemyGraphics.lineStyle(2, 0xffd6e8, 1);
-        this.enemyGraphics.strokeCircle(x, y, 15);
-      }
 
       this.enemyGraphics.fillStyle(0x251f32, 1);
       this.enemyGraphics.fillRect(x - 15, y - 21, 30, 4);
@@ -1600,10 +1561,14 @@ export class BattlefieldScene extends Phaser.Scene {
       this.attackCombat === null ||
       (this.phase !== 'attack-combat' && this.phase !== 'attack-result')
     ) {
+      this.spriteRenderer.renderAttackers([]);
+      this.spriteRenderer.renderCommander(null);
       return;
     }
 
     const commander = this.attackCombat.commander;
+    this.spriteRenderer.renderAttackers(this.attackCombat.units);
+    this.spriteRenderer.renderCommander(commander);
     const center = this.gridCenter(commander.position);
     if (this.isFocusTargeting) {
       this.attackerGraphics.fillStyle(0x4de1c1, 0.1);
@@ -1624,18 +1589,6 @@ export class BattlefieldScene extends Phaser.Scene {
     for (const unit of this.attackCombat.units) {
       const x = GRID_OFFSET_X + unit.renderColumn * GRID_CELL_SIZE + GRID_CELL_SIZE / 2;
       const y = GRID_OFFSET_Y + unit.renderRow * GRID_CELL_SIZE + GRID_CELL_SIZE / 2;
-      this.attackerGraphics.fillStyle(UNIT_COLORS[unit.kind], 1);
-      if (unit.kind === 'tank') {
-        this.attackerGraphics.fillRoundedRect(x - 15, y - 14, 30, 28, 7);
-      } else if (unit.kind === 'swarm') {
-        this.attackerGraphics.fillCircle(x - 7, y + 3, 7);
-        this.attackerGraphics.fillCircle(x + 7, y + 3, 7);
-        this.attackerGraphics.fillCircle(x, y - 7, 7);
-      } else {
-        this.attackerGraphics.fillCircle(x, y, 12);
-        this.attackerGraphics.lineStyle(3, 0xffe0f3, 1);
-        this.attackerGraphics.strokeCircle(x, y, 12);
-      }
       this.drawHealthBar(this.attackerGraphics, x, y - 20, unit.healthRatio, 30);
       if (this.attackCombat.isUnitFocused(unit.id)) {
         this.attackerGraphics.lineStyle(3, 0xff6b6b, 0.95);
@@ -1646,19 +1599,8 @@ export class BattlefieldScene extends Phaser.Scene {
       }
     }
 
-    this.attackerGraphics.fillStyle(0x4de1c1, 1);
-    this.attackerGraphics.fillCircle(center.x, center.y, 17);
     this.attackerGraphics.lineStyle(4, 0xe0fff8, 1);
-    this.attackerGraphics.strokeCircle(center.x, center.y, 19);
-    this.attackerGraphics.fillStyle(0x173a42, 1);
-    this.attackerGraphics.fillTriangle(
-      center.x,
-      center.y - 11,
-      center.x - 9,
-      center.y + 8,
-      center.x + 9,
-      center.y + 8,
-    );
+    this.attackerGraphics.strokeCircle(center.x, center.y, 22);
     this.drawHealthBar(
       this.attackerGraphics,
       center.x,
@@ -1733,6 +1675,12 @@ export class BattlefieldScene extends Phaser.Scene {
     });
   }
 
+  private presentCombatEvents(events: readonly CombatEvent[]): void {
+    if (events.length === 0) return;
+    this.effects.present(events);
+    this.audioDirector.present(events);
+  }
+
   private failureMessage(reason: DefenseEditFailureReason): string {
     const messages: Readonly<Record<DefenseEditFailureReason, string>> = {
       'outside-map': '전장 밖에는 시설을 배치할 수 없습니다.',
@@ -1763,6 +1711,7 @@ export class BattlefieldScene extends Phaser.Scene {
     this.phase = 'combat';
     this.firstRunGuide.beginDefenseCombat();
     this.resultText.setVisible(false);
+    this.audioDirector.playUi('confirm');
     this.setStatus('방어전 시작! 타워가 자동으로 공격하며 적은 시설과 코어를 노립니다.');
     this.updatePhaseInterface();
     this.renderGuideCoachMark();
@@ -1855,6 +1804,7 @@ export class BattlefieldScene extends Phaser.Scene {
     this.phase = 'attack-combat';
     this.firstRunGuide.beginAttackCombat();
     this.resultText.setVisible(false);
+    this.audioDirector.playUi('confirm');
     this.setStatus('공격 시작! WASD로 지휘관을 이동하고 Q 집중 공격, E 교란을 사용하세요.');
     this.updatePhaseInterface();
     this.renderGuideCoachMark();
@@ -2285,6 +2235,7 @@ export class BattlefieldScene extends Phaser.Scene {
       '[Space] 방어전 시작',
       '',
       '[Tab] 순위표  [N] 닉네임',
+      '[M] 소리 켜기/끄기',
     ].join('\n');
   }
 
@@ -2302,6 +2253,7 @@ export class BattlefieldScene extends Phaser.Scene {
       '[C] 지휘관 진입로 변경',
       '[Space] 공격 시작',
       '[Tab] 순위표  [N] 닉네임',
+      '[M] 소리 켜기/끄기',
       '',
       `진입로별 처음 ${SIMULTANEOUS_CAPACITY_PER_LANE}명은 동시에`,
       `나머지는 ${SQUAD_SPAWN_INTERVAL_MS / 1000}초 간격 출격합니다.`,
@@ -2322,11 +2274,13 @@ export class BattlefieldScene extends Phaser.Scene {
       '일반 유닛은 자동으로 이동하고',
       '시설과 코어를 공격합니다.',
       '지휘관 사망 시 즉시 실패합니다.',
+      '[M] 소리 켜기/끄기',
     ].join('\n');
   }
 
   private setStatus(message: string, isWarning = false): void {
     this.statusText.setColor(isWarning ? '#ff7b8f' : GAME_COLORS.secondary);
     this.statusText.setText(message);
+    if (isWarning) this.audioDirector.playUi('error');
   }
 }

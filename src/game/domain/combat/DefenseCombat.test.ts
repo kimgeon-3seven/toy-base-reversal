@@ -199,4 +199,32 @@ describe('DefenseCombat', () => {
     expect(combat.enemies).toHaveLength(2);
     expect(combat.remainingSpawnCount).toBe(0);
   });
+
+  it('publishes attack and destruction events once for presentation feedback', () => {
+    const field = createBattlefield();
+    field.place(
+      new DefenseStructure('tower', 'tower', new GridPosition(1, 0), 100),
+    );
+    const combat = new DefenseCombat(
+      field,
+      new DefenseWave([
+        {
+          delayMs: 0,
+          entryIndex: 0,
+          stats: { ...durableEnemy, maxHealth: 5 },
+        },
+      ]),
+      defaultConfig,
+    );
+
+    combat.update(50);
+
+    expect(combat.drainEvents()).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ type: 'attack', style: 'popgun' }),
+        expect.objectContaining({ type: 'destroyed', targetKind: 'unit' }),
+      ]),
+    );
+    expect(combat.drainEvents()).toEqual([]);
+  });
 });
