@@ -425,7 +425,6 @@ export class BattlefieldScene extends Phaser.Scene {
       selectUnit: (unit) => this.selectAttackUnit(unit),
       addUnit: (laneIndex) => this.addUnitToLane(laneIndex),
       removeUnit: (laneIndex) => this.removeUnitFromLane(laneIndex),
-      setCommanderLane: (laneIndex) => this.setCommanderLane(laneIndex),
       recommend: () => this.applyRecommendedSquad(),
       clear: () => this.clearSquadPlan(),
       start: () => this.startAttackCombat(),
@@ -1090,12 +1089,6 @@ export class BattlefieldScene extends Phaser.Scene {
       this.pauseGame();
     });
 
-    this.input.keyboard?.on('keydown-C', () => {
-      if (this.phase !== 'attack-preparation' || this.squadPlan === null) return;
-      const nextLane = (this.squadPlan.commanderLane + 1) % 3;
-      this.setCommanderLane(nextLane);
-    });
-
     this.input.keyboard?.on('keydown-BACKSPACE', () => {
       this.removeUnitFromLane(this.selectedAttackLane);
     });
@@ -1296,15 +1289,6 @@ export class BattlefieldScene extends Phaser.Scene {
     );
     this.selectedAttackLane = 1;
     this.setStatus('방어선 상성을 고려한 추천 편성으로 초기화했습니다.');
-    this.updatePhaseInterface();
-    this.renderBattlefield();
-  }
-
-  private setCommanderLane(laneIndex: number): void {
-    if (this.phase !== 'attack-preparation' || this.squadPlan === null) return;
-    if (!this.squadPlan.setCommanderLane(laneIndex)) return;
-    this.selectedAttackLane = laneIndex;
-    this.setStatus(`지휘관이 ${laneIndex + 1}번 진입로에서 출발합니다.`);
     this.updatePhaseInterface();
     this.renderBattlefield();
   }
@@ -2323,7 +2307,6 @@ export class BattlefieldScene extends Phaser.Scene {
         [
           `출격 포인트: ${this.squadPlan.remainingSortiePoints}/${this.squadPlan.totalSortiePoints}`,
           `대기열: ${this.squadPlan.lanes.map((lane) => lane.length).join(' / ')}`,
-          `지휘관: ${this.squadPlan.commanderLane + 1}번 진입로`,
           ...(this.roundSession.isChallengeMode
             ? [this.challengeRecordText()]
             : []),
@@ -2543,7 +2526,6 @@ export class BattlefieldScene extends Phaser.Scene {
           this.roundSession.currentRound,
         ),
         lanes: this.squadPlan.lanes,
-        commanderLane: this.squadPlan.commanderLane,
         remainingPoints: this.squadPlan.remainingSortiePoints,
         totalPoints: this.squadPlan.totalSortiePoints,
       });

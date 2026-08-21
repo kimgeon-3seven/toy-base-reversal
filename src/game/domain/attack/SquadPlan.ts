@@ -6,7 +6,6 @@ export type AttackUnitKind = UnitArchetype;
 export class SquadPlan {
   private readonly laneQueues: AttackUnitKind[][];
   private spentBudget = 0;
-  private currentCommanderLane: number;
 
   public constructor(
     public readonly totalBudget: number,
@@ -23,7 +22,6 @@ export class SquadPlan {
       throw new Error('Squad plan values must be positive.');
     }
     this.laneQueues = Array.from({ length: laneCount }, () => []);
-    this.currentCommanderLane = Math.min(1, laneCount - 1);
   }
 
   public get remainingBudget(): number {
@@ -43,7 +41,7 @@ export class SquadPlan {
   }
 
   public get commanderLane(): number {
-    return this.currentCommanderLane;
+    return Math.min(1, this.laneQueues.length - 1);
   }
 
   public get lanes(): readonly (readonly AttackUnitKind[])[] {
@@ -78,14 +76,6 @@ export class SquadPlan {
     for (const lane of this.laneQueues) lane.splice(0, lane.length);
     this.spentBudget = 0;
     return refundedPoints;
-  }
-
-  public setCommanderLane(laneIndex: number): boolean {
-    if (this.laneQueues[laneIndex] === undefined) {
-      return false;
-    }
-    this.currentCommanderLane = laneIndex;
-    return true;
   }
 
   public buildSpawnSchedule(

@@ -40,7 +40,6 @@ export class BalancedSquadPreset implements SquadPresetStrategy {
         availableUnits[(laneIndex + 1) % availableUnits.length] ?? primary;
       plan.addUnit(laneIndex, secondary);
     }
-    plan.setCommanderLane(Math.min(1, plan.lanes.length - 1));
   }
 }
 

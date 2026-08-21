@@ -2,6 +2,15 @@ import { describe, expect, it } from 'vitest';
 import { SquadPlan } from './SquadPlan';
 
 describe('SquadPlan', () => {
+  it('keeps the commander fixed at the second lane', () => {
+    const plan = new SquadPlan(12, 2, 3);
+
+    plan.addUnit(0, 'tank');
+    plan.addUnit(2, 'ranger');
+
+    expect(plan.commanderLane).toBe(1);
+  });
+
   it('spends and refunds the shared attack budget', () => {
     const plan = new SquadPlan(7, 2);
 

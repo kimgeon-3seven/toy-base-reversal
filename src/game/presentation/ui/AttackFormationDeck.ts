@@ -9,7 +9,6 @@ export interface AttackFormationDeckModel {
   readonly selectedUnit: AttackUnitKind;
   readonly availableUnits: readonly AttackUnitKind[];
   readonly lanes: readonly (readonly AttackUnitKind[])[];
-  readonly commanderLane: number;
   readonly remainingPoints: number;
   readonly totalPoints: number;
 }
@@ -18,7 +17,6 @@ export interface AttackFormationDeckActions {
   readonly selectUnit: (unit: AttackUnitKind) => void;
   readonly addUnit: (laneIndex: number) => void;
   readonly removeUnit: (laneIndex: number) => void;
-  readonly setCommanderLane: (laneIndex: number) => void;
   readonly recommend: () => void;
   readonly clear: () => void;
   readonly start: () => void;
@@ -36,7 +34,6 @@ export class AttackFormationDeck {
   private readonly unitButtons: ReadonlyMap<AttackUnitKind, TextButton>;
   private readonly addButtons: readonly TextButton[];
   private readonly removeButtons: readonly TextButton[];
-  private readonly commanderButtons: readonly TextButton[];
   private readonly laneTexts: readonly Phaser.GameObjects.Text[];
   private readonly budgetText: Phaser.GameObjects.Text;
   private readonly startButton: TextButton;
@@ -46,7 +43,7 @@ export class AttackFormationDeck {
     actions: AttackFormationDeckActions,
   ) {
     const panel = scene.add
-      .rectangle(0, 0, 940, 252, 0x171321, 0.97)
+      .rectangle(0, 0, 940, 180, 0x171321, 0.97)
       .setOrigin(0)
       .setStrokeStyle(3, 0x9fe3c3, 0.96);
     const title = scene.add.text(20, 14, '공격 편성 보드', {
@@ -71,9 +68,9 @@ export class AttackFormationDeck {
       const button = new TextButton(
         scene,
         96 + index * 164,
-        70,
+        50,
         154,
-        42,
+        32,
         '',
         () => actions.selectUnit(unit),
       );
@@ -85,27 +82,27 @@ export class AttackFormationDeck {
     const recommendButton = new TextButton(
       scene,
       583,
-      70,
+      50,
       130,
-      42,
+      32,
       '추천 편성 [P]',
       actions.recommend,
     );
     const clearButton = new TextButton(
       scene,
       707,
-      70,
+      50,
       100,
-      42,
+      32,
       '전체 비우기',
       actions.clear,
     );
     this.startButton = new TextButton(
       scene,
       849,
-      70,
+      50,
       160,
-      42,
+      32,
       '공격 시작 [Space]',
       actions.start,
       {
@@ -120,61 +117,49 @@ export class AttackFormationDeck {
     const laneTexts: Phaser.GameObjects.Text[] = [];
     const addButtons: TextButton[] = [];
     const removeButtons: TextButton[] = [];
-    const commanderButtons: TextButton[] = [];
     for (let laneIndex = 0; laneIndex < 3; laneIndex += 1) {
-      const y = 124 + laneIndex * 41;
-      const queue = scene.add.text(126, y - 10, '', {
+      const y = 88 + laneIndex * 36;
+      const queue = scene.add.text(126, y - 9, '', {
         color: '#f8f4e8',
         fontFamily: 'Arial, sans-serif',
-        fontSize: '15px',
+        fontSize: '14px',
       });
       const add = new TextButton(
         scene,
-        580,
+        756,
         y,
         110,
-        32,
+        28,
         '+ 선택 유닛',
         () => actions.addUnit(laneIndex),
       );
       const remove = new TextButton(
         scene,
-        699,
+        874,
         y,
         110,
-        32,
+        28,
         '마지막 제거',
         () => actions.removeUnit(laneIndex),
-      );
-      const commander = new TextButton(
-        scene,
-        836,
-        y,
-        146,
-        32,
-        '지휘관 배치',
-        () => actions.setCommanderLane(laneIndex),
       );
       laneTexts.push(queue);
       addButtons.push(add);
       removeButtons.push(remove);
-      commanderButtons.push(commander);
-      buttons.push(add, remove, commander);
+      buttons.push(add, remove);
     }
     this.laneTexts = laneTexts;
     this.addButtons = addButtons;
     this.removeButtons = removeButtons;
-    this.commanderButtons = commanderButtons;
 
     const laneLabels = Array.from({ length: 3 }, (_, laneIndex) =>
-      scene.add.text(20, 114 + laneIndex * 41, `${laneIndex + 1}번 진입로`, {
+      scene.add.text(20, 79 + laneIndex * 36, `${laneIndex + 1}번 진입로`, {
         color: GAME_COLORS.primary,
         fontFamily: 'Arial, sans-serif',
-        fontSize: '16px',
+        fontSize: '15px',
         fontStyle: 'bold',
       }),
     );
-    this.container = scene.add.container(42, 444, [
+    this.container = scene.add.container(42, 520, [
       panel,
       title,
       this.budgetText,
@@ -209,12 +194,6 @@ export class AttackFormationDeck {
         model.remainingPoints >= attackUnitCost(model.selectedUnit),
       );
       this.removeButtons[laneIndex]?.setEnabled(lane.length > 0);
-      this.commanderButtons[laneIndex]?.setSelected(
-        model.commanderLane === laneIndex,
-      );
-      this.commanderButtons[laneIndex]?.setLabel(
-        model.commanderLane === laneIndex ? '★ 지휘관 출발' : '지휘관 배치',
-      );
     });
     this.startButton.setEnabled(model.lanes.some((lane) => lane.length > 0));
   }
