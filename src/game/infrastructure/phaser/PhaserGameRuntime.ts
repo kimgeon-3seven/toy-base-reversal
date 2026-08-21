@@ -6,8 +6,7 @@ import type { GameRuntime } from '../../ports/GameRuntime';
 import { BootScene } from '../../presentation/scenes/BootScene';
 import { BattlefieldScene } from '../../presentation/scenes/BattlefieldScene';
 import { DomNicknameEditor } from '../dom/DomNicknameEditor';
-import { HttpLeaderboardRepository } from '../http/HttpLeaderboardRepository';
-import { UnavailableLeaderboardRepository } from '../http/UnavailableLeaderboardRepository';
+import { LeaderboardRepositoryFactory } from '../http/LeaderboardRepositoryFactory';
 import { LocalStoragePlayerIdentityProvider } from '../storage/LocalStoragePlayerIdentityProvider';
 import { LocalStoragePlayerRecordRepository } from '../storage/LocalStoragePlayerRecordRepository';
 
@@ -30,10 +29,10 @@ export class PhaserGameRuntime implements GameRuntime {
     );
     const leaderboardEndpoint = import.meta.env.VITE_LEADERBOARD_ENDPOINT;
     const leaderboardKey = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
-    const leaderboardRepository =
-      leaderboardEndpoint !== undefined && leaderboardKey !== undefined
-        ? new HttpLeaderboardRepository(leaderboardEndpoint, leaderboardKey)
-        : new UnavailableLeaderboardRepository();
+    const leaderboardRepository = new LeaderboardRepositoryFactory().create({
+      endpoint: leaderboardEndpoint,
+      publishableKey: leaderboardKey,
+    });
     const leaderboardService = new LeaderboardService(
       leaderboardRepository,
       playerIdentity,
