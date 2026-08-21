@@ -1,6 +1,7 @@
 import type Phaser from 'phaser';
 
 export const IMAGE_ASSETS = {
+  battlefieldBackground: 'battlefield-background',
   towerPopgun: 'tower-popgun',
   towerMortar: 'tower-mortar',
   towerPiercer: 'tower-piercer',
@@ -42,6 +43,10 @@ function assetUrl(path: string): string {
 
 export function preloadGameAssets(loader: Phaser.Loader.LoaderPlugin): void {
   const sprites = 'sprites/tower-defense';
+  loader.image(
+    IMAGE_ASSETS.battlefieldBackground,
+    assetUrl('backgrounds/toy-battlefield-v1.png'),
+  );
   loader.image(IMAGE_ASSETS.towerPopgun, assetUrl(`${sprites}/tower-popgun.png`));
   loader.image(IMAGE_ASSETS.towerMortar, assetUrl(`${sprites}/tower-mortar.png`));
   loader.image(IMAGE_ASSETS.towerPiercer, assetUrl(`${sprites}/tower-piercer.png`));

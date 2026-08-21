@@ -43,6 +43,8 @@ pnpm check
 ## 아트와 사운드
 
 - Kenney Tower Defense (Top-Down) 기반의 타워·유닛·장애물 아트
+- OpenAI 이미지 생성으로 제작한 종이·펠트 장난감 놀이판 배경
+- 유닛·지휘관 8방향 전환, 타워 360도 조준, 그림자·이동 바운스·발사 반동 표현
 - Kenney Particle Pack과 Smoke Particles 기반의 투사체·피격·파괴·능력 연출
 - Kenney Interface Sounds, Impact Sounds, Digital Audio 기반의 UI·전투 효과음
 - OpenGameArt의 CC0 트랙 `Loop Town` 배경음악

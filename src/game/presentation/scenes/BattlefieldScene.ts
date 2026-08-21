@@ -72,6 +72,7 @@ import type { CombatEvent } from '../../domain/combat/CombatEvent';
 import { BattlefieldSpriteRenderer } from '../rendering/BattlefieldSpriteRenderer';
 import { BattlefieldEffects } from '../effects/BattlefieldEffects';
 import { BattlefieldAudioDirector } from '../audio/BattlefieldAudioDirector';
+import { BattlefieldBackdropRenderer } from '../rendering/BattlefieldBackdropRenderer';
 
 const PATH_COLORS = [0x59c3c3, 0xff8c61, 0x8bd17c] as const;
 type DefenseScenePhase =
@@ -194,6 +195,7 @@ export class BattlefieldScene extends Phaser.Scene {
     };
 
     this.createStaticInterface();
+    new BattlefieldBackdropRenderer(this);
     this.pathGraphics = this.add.graphics();
     this.boardGraphics = this.add.graphics();
     this.structureGraphics = this.add.graphics();
@@ -1359,6 +1361,13 @@ export class BattlefieldScene extends Phaser.Scene {
 
   private renderGrid(): void {
     this.boardGraphics.clear();
+    this.boardGraphics.fillStyle(0x092c2b, 0.22);
+    this.boardGraphics.fillRect(
+      GRID_OFFSET_X,
+      GRID_OFFSET_Y,
+      GRID_COLUMNS * GRID_CELL_SIZE,
+      GRID_ROWS * GRID_CELL_SIZE,
+    );
 
     for (let row = 0; row < GRID_ROWS; row += 1) {
       for (let column = 0; column < GRID_COLUMNS; column += 1) {
@@ -1403,7 +1412,12 @@ export class BattlefieldScene extends Phaser.Scene {
 
   private renderStructures(): void {
     this.structureGraphics.clear();
-    this.spriteRenderer.renderStructures(this.editor.battlefield.structures);
+    this.spriteRenderer.renderStructures(
+      this.editor.battlefield.structures,
+      new Set(
+        this.attackCombat?.activeDisruptions.map(({ towerId }) => towerId) ?? [],
+      ),
+    );
 
     for (const structure of this.editor.battlefield.structures) {
       const center = this.gridCenter(structure.position);
@@ -1677,6 +1691,7 @@ export class BattlefieldScene extends Phaser.Scene {
 
   private presentCombatEvents(events: readonly CombatEvent[]): void {
     if (events.length === 0) return;
+    this.spriteRenderer.present(events);
     this.effects.present(events);
     this.audioDirector.present(events);
   }

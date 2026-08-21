@@ -4,6 +4,13 @@ All third-party assets used by Toy Base Reversal are distributed under
 Creative Commons Zero (CC0). Attribution is not required, but the creators and
 source pages are documented here for traceability.
 
+The battlefield backdrop at
+`public/assets/backgrounds/toy-battlefield-v1.png` is project-owned artwork
+generated with OpenAI's built-in image generation tool on 2026-08-21. It is
+not a third-party asset. The production prompt requested an orthographic
+top-down wooden desk and a calm green felt-and-cardboard play surface, with no
+characters, structures, grid, text, logos, or watermark.
+
 ## Kenney
 
 Creator: Kenney Vleugels / Kenney.nl  
@@ -31,4 +38,3 @@ The license files shipped with each Kenney pack are preserved under
 - Creator: Fupi
 - License: [Creative Commons Zero 1.0](https://creativecommons.org/publicdomain/zero/1.0/)
 - File used: `loopcity.ogg`, renamed to `loop-town.ogg`.
-

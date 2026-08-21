@@ -1,6 +1,10 @@
 import Phaser from 'phaser';
 import type { AttackCommander } from '../../domain/attack/AttackCommander';
 import type { AttackUnit } from '../../domain/attack/AttackUnit';
+import type {
+  CombatEvent,
+  CombatPoint,
+} from '../../domain/combat/CombatEvent';
 import type { DefenseEnemy } from '../../domain/combat/DefenseEnemy';
 import type { DefenseStructure } from '../../domain/structures/DefenseStructure';
 import {
@@ -9,47 +13,62 @@ import {
   GRID_OFFSET_Y,
 } from '../../config/BattlefieldConfig';
 import { IMAGE_ASSETS } from '../assets/GameAssets';
+import {
+  BattlefieldSpriteView,
+  type BattlefieldSpriteState,
+} from './BattlefieldSpriteView';
+import { FacingDirectionResolver } from './FacingDirectionResolver';
 
-interface SpriteDescriptor {
+interface SpriteDescriptor extends BattlefieldSpriteState {
   readonly id: string;
-  readonly texture: string;
-  readonly x: number;
-  readonly y: number;
-  readonly displaySize: number;
-  readonly depth: number;
 }
 
+const NATURAL_FACING = {
+  up: -90,
+  right: 0,
+  left: 180,
+} as const;
+
 export class BattlefieldSpriteRenderer {
-  private readonly structures = new Map<string, Phaser.GameObjects.Image>();
-  private readonly defenders = new Map<string, Phaser.GameObjects.Image>();
-  private readonly attackers = new Map<string, Phaser.GameObjects.Image>();
-  private commander: Phaser.GameObjects.Image | null = null;
-  private readonly core: Phaser.GameObjects.Image;
+  private readonly facingResolver = new FacingDirectionResolver();
+  private readonly structures = new Map<string, BattlefieldSpriteView>();
+  private readonly defenders = new Map<string, BattlefieldSpriteView>();
+  private readonly attackers = new Map<string, BattlefieldSpriteView>();
+  private commander: BattlefieldSpriteView | null = null;
+  private readonly core: BattlefieldSpriteView;
 
   public constructor(private readonly scene: Phaser.Scene) {
-    this.core = scene.add.image(0, 0, IMAGE_ASSETS.core).setDepth(9);
+    this.core = new BattlefieldSpriteView(
+      scene,
+      this.facingResolver,
+      'core',
+      this.coreState(0, 0, 1),
+    );
   }
 
   public renderCore(column: number, row: number, healthRatio: number): void {
-    const point = this.toWorld(column, row);
-    this.core
-      .setPosition(point.x, point.y)
-      .setDisplaySize(58, 58)
-      .setTint(healthRatio > 0.4 ? 0xffffff : 0xff8a8a)
-      .setAlpha(healthRatio > 0 ? 1 : 0.35)
-      .setVisible(true);
+    this.core.sync(this.coreState(column, row, healthRatio));
   }
 
-  public renderStructures(structures: readonly DefenseStructure[]): void {
+  public renderStructures(
+    structures: readonly DefenseStructure[],
+    disabledTowerIds: ReadonlySet<string> = new Set<string>(),
+  ): void {
     const descriptors = structures.map((structure): SpriteDescriptor => {
       const point = this.toWorld(structure.position.column, structure.position.row);
+      const texture = this.structureTexture(structure);
       return {
         id: structure.id,
-        texture: this.structureTexture(structure),
+        texture,
         x: point.x,
         y: point.y,
         displaySize: structure.kind === 'obstacle' ? 53 : 58,
         depth: 12,
+        naturalFacingDegrees: this.naturalFacingFor(texture),
+        initialFacingDegrees: 0,
+        facingMode: structure.kind === 'tower' ? 'free' : 'static',
+        enableMovementBob: false,
+        isDisrupted: disabledTowerIds.has(structure.id),
       };
     });
     this.sync(this.structures, descriptors);
@@ -58,18 +77,23 @@ export class BattlefieldSpriteRenderer {
   public renderDefenders(enemies: readonly DefenseEnemy[]): void {
     const descriptors = enemies.map((enemy): SpriteDescriptor => {
       const point = this.toWorld(enemy.renderColumn, enemy.renderRow);
+      const texture =
+        enemy.stats.archetype === 'tank'
+          ? IMAGE_ASSETS.defenderTank
+          : enemy.stats.archetype === 'swarm'
+            ? IMAGE_ASSETS.defenderSwarm
+            : IMAGE_ASSETS.defenderRanger;
       return {
         id: enemy.id,
-        texture:
-          enemy.stats.archetype === 'tank'
-            ? IMAGE_ASSETS.defenderTank
-            : enemy.stats.archetype === 'swarm'
-              ? IMAGE_ASSETS.defenderSwarm
-              : IMAGE_ASSETS.defenderRanger,
+        texture,
         x: point.x,
         y: point.y,
         displaySize: enemy.stats.archetype === 'tank' ? 60 : 54,
         depth: 15,
+        naturalFacingDegrees: this.naturalFacingFor(texture),
+        initialFacingDegrees: 0,
+        facingMode: 'eight-way',
+        enableMovementBob: true,
       };
     });
     this.sync(this.defenders, descriptors);
@@ -78,18 +102,23 @@ export class BattlefieldSpriteRenderer {
   public renderAttackers(units: readonly AttackUnit[]): void {
     const descriptors = units.map((unit): SpriteDescriptor => {
       const point = this.toWorld(unit.renderColumn, unit.renderRow);
+      const texture =
+        unit.kind === 'tank'
+          ? IMAGE_ASSETS.attackerTank
+          : unit.kind === 'swarm'
+            ? IMAGE_ASSETS.attackerSwarm
+            : IMAGE_ASSETS.attackerRanger;
       return {
         id: unit.id,
-        texture:
-          unit.kind === 'tank'
-            ? IMAGE_ASSETS.attackerTank
-            : unit.kind === 'swarm'
-              ? IMAGE_ASSETS.attackerSwarm
-              : IMAGE_ASSETS.attackerRanger,
+        texture,
         x: point.x,
         y: point.y,
         displaySize: unit.kind === 'tank' ? 60 : 54,
         depth: 16,
+        naturalFacingDegrees: this.naturalFacingFor(texture),
+        initialFacingDegrees: 0,
+        facingMode: 'eight-way',
+        enableMovementBob: true,
       };
     });
     this.sync(this.attackers, descriptors);
@@ -103,15 +132,38 @@ export class BattlefieldSpriteRenderer {
     }
 
     const point = this.toWorld(commander.position.column, commander.position.row);
+    const state: BattlefieldSpriteState = {
+      texture: IMAGE_ASSETS.commander,
+      x: point.x,
+      y: point.y,
+      displaySize: 64,
+      depth: 17,
+      naturalFacingDegrees: NATURAL_FACING.up,
+      initialFacingDegrees: 0,
+      facingMode: 'eight-way',
+      enableMovementBob: true,
+      alpha: commander.isAlive ? 1 : 0.35,
+    };
     if (this.commander === null) {
-      this.commander = this.scene.add
-        .image(point.x, point.y, IMAGE_ASSETS.commander)
-        .setDepth(17);
+      this.commander = new BattlefieldSpriteView(
+        this.scene,
+        this.facingResolver,
+        'commander',
+        state,
+      );
+    } else {
+      this.commander.sync(state);
     }
-    this.commander
-      .setPosition(point.x, point.y)
-      .setDisplaySize(64, 64)
-      .setAlpha(commander.isAlive ? 1 : 0.35);
+  }
+
+  public present(events: readonly CombatEvent[]): void {
+    for (const event of events) {
+      if (event.type !== 'attack') continue;
+      const source = this.attackSourceFor(event);
+      const targetPoint = this.toWorld(event.target.column, event.target.row);
+      source?.playAttackToward(targetPoint.x, targetPoint.y);
+      this.nearestSpriteTo(event.target, this.allSprites())?.flashHit();
+    }
   }
 
   public clearCombatants(): void {
@@ -121,7 +173,7 @@ export class BattlefieldSpriteRenderer {
   }
 
   private sync(
-    sprites: Map<string, Phaser.GameObjects.Image>,
+    sprites: Map<string, BattlefieldSpriteView>,
     descriptors: readonly SpriteDescriptor[],
   ): void {
     const liveIds = new Set(descriptors.map((descriptor) => descriptor.id));
@@ -132,19 +184,86 @@ export class BattlefieldSpriteRenderer {
     }
 
     for (const descriptor of descriptors) {
-      let sprite = sprites.get(descriptor.id);
-      if (sprite === undefined) {
-        sprite = this.scene.add
-          .image(descriptor.x, descriptor.y, descriptor.texture)
-          .setDepth(descriptor.depth);
-        sprites.set(descriptor.id, sprite);
+      const existing = sprites.get(descriptor.id);
+      if (existing === undefined) {
+        sprites.set(
+          descriptor.id,
+          new BattlefieldSpriteView(
+            this.scene,
+            this.facingResolver,
+            descriptor.id,
+            descriptor,
+          ),
+        );
+      } else {
+        existing.sync(descriptor);
       }
-      sprite
-        .setTexture(descriptor.texture)
-        .setPosition(descriptor.x, descriptor.y)
-        .setDisplaySize(descriptor.displaySize, descriptor.displaySize)
-        .setVisible(true);
     }
+  }
+
+  private attackSourceFor(
+    event: Extract<CombatEvent, { readonly type: 'attack' }>,
+  ): BattlefieldSpriteView | null {
+    if (
+      event.style === 'popgun' ||
+      event.style === 'mortar' ||
+      event.style === 'piercer'
+    ) {
+      return this.nearestSpriteTo(event.source, this.structures.values());
+    }
+    if (event.style === 'commander') return this.commander;
+    return this.nearestSpriteTo(event.source, [
+      ...this.defenders.values(),
+      ...this.attackers.values(),
+    ]);
+  }
+
+  private nearestSpriteTo(
+    point: CombatPoint,
+    sprites: Iterable<BattlefieldSpriteView>,
+  ): BattlefieldSpriteView | null {
+    const world = this.toWorld(point.column, point.row);
+    let nearest: BattlefieldSpriteView | null = null;
+    let nearestDistance = Number.POSITIVE_INFINITY;
+    for (const sprite of sprites) {
+      const distance = sprite.distanceSquaredTo(world.x, world.y);
+      if (distance < nearestDistance) {
+        nearest = sprite;
+        nearestDistance = distance;
+      }
+    }
+    return nearestDistance <= GRID_CELL_SIZE ** 2 ? nearest : null;
+  }
+
+  private allSprites(): readonly BattlefieldSpriteView[] {
+    return [
+      this.core,
+      ...this.structures.values(),
+      ...this.defenders.values(),
+      ...this.attackers.values(),
+      ...(this.commander === null ? [] : [this.commander]),
+    ];
+  }
+
+  private coreState(
+    column: number,
+    row: number,
+    healthRatio: number,
+  ): BattlefieldSpriteState {
+    const point = this.toWorld(column, row);
+    return {
+      texture: IMAGE_ASSETS.core,
+      x: point.x,
+      y: point.y,
+      displaySize: 58,
+      depth: 9,
+      naturalFacingDegrees: 0,
+      initialFacingDegrees: 0,
+      facingMode: 'static',
+      enableMovementBob: false,
+      tint: healthRatio > 0.4 ? 0xffffff : 0xff8a8a,
+      alpha: healthRatio > 0 ? 1 : 0.35,
+    };
   }
 
   private structureTexture(structure: DefenseStructure): string {
@@ -152,6 +271,12 @@ export class BattlefieldSpriteRenderer {
     if (structure.towerArchetype === 'mortar') return IMAGE_ASSETS.towerMortar;
     if (structure.towerArchetype === 'piercer') return IMAGE_ASSETS.towerPiercer;
     return IMAGE_ASSETS.towerPopgun;
+  }
+
+  private naturalFacingFor(texture: string): number {
+    if (texture === IMAGE_ASSETS.attackerTank) return NATURAL_FACING.right;
+    if (texture === IMAGE_ASSETS.towerPopgun) return NATURAL_FACING.left;
+    return NATURAL_FACING.up;
   }
 
   private toWorld(column: number, row: number): Phaser.Math.Vector2 {
