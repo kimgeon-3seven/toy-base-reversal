@@ -1,5 +1,6 @@
 import Phaser from 'phaser';
 import { DefenseEditor } from '../../application/DefenseEditor';
+import type { AudioSettingsService } from '../../application/AudioSettingsService';
 import type { GameRecordService } from '../../application/GameRecordService';
 import type {
   LeaderboardResult,
@@ -73,6 +74,8 @@ import { BattlefieldSpriteRenderer } from '../rendering/BattlefieldSpriteRendere
 import { BattlefieldEffects } from '../effects/BattlefieldEffects';
 import { BattlefieldAudioDirector } from '../audio/BattlefieldAudioDirector';
 import { BattlefieldBackdropRenderer } from '../rendering/BattlefieldBackdropRenderer';
+import { AudioControlPanel } from '../ui/AudioControlPanel';
+import { PauseMenu } from '../ui/PauseMenu';
 
 const PATH_COLORS = [0x59c3c3, 0xff8c61, 0x8bd17c] as const;
 type DefenseScenePhase =
@@ -96,6 +99,9 @@ export class BattlefieldScene extends Phaser.Scene {
   private spriteRenderer!: BattlefieldSpriteRenderer;
   private effects!: BattlefieldEffects;
   private audioDirector!: BattlefieldAudioDirector;
+  private audioControlPanel: AudioControlPanel | null = null;
+  private pauseMenu: PauseMenu | null = null;
+  private isPaused = false;
   private statusText!: Phaser.GameObjects.Text;
   private selectionText!: Phaser.GameObjects.Text;
   private phaseText!: Phaser.GameObjects.Text;
@@ -150,11 +156,17 @@ export class BattlefieldScene extends Phaser.Scene {
     private readonly leaderboardService: LeaderboardService,
     private readonly nicknameEditor: NicknameEditor,
     private readonly firstRunGuideService: FirstRunGuideService,
+    private readonly audioSettingsService: AudioSettingsService,
   ) {
     super({ key: 'BattlefieldScene' });
   }
 
   public create(): void {
+    this.audioControlPanel = null;
+    this.pauseMenu = null;
+    this.isPaused = false;
+    this.time.paused = false;
+    this.tweens.resumeAll();
     this.roundSession = new RoundSession(NORMAL_MODE_ROUND_COUNT);
     this.playerRecord = this.gameRecordService.record;
     this.recordResetArmedUntil = 0;
@@ -194,6 +206,10 @@ export class BattlefieldScene extends Phaser.Scene {
       right: this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.D),
     };
 
+    this.audioDirector = new BattlefieldAudioDirector(
+      this,
+      this.audioSettingsService,
+    );
     this.createStaticInterface();
     new BattlefieldBackdropRenderer(this);
     this.pathGraphics = this.add.graphics();
@@ -208,12 +224,13 @@ export class BattlefieldScene extends Phaser.Scene {
     this.attackerGraphics.setDepth(32);
     this.spriteRenderer = new BattlefieldSpriteRenderer(this);
     this.effects = new BattlefieldEffects(this);
-    this.audioDirector = new BattlefieldAudioDirector(this);
     this.createTutorialOverlay();
     this.createGuideCoachMark();
     this.createLeaderboardOverlay();
+    this.createGameControls();
 
     this.input.on('pointerdown', (pointer: Phaser.Input.Pointer) => {
+      if (this.isPaused) return;
       this.audioDirector.startMusic();
       this.audioDirector.playUi('click');
       this.handlePointerDown(pointer);
@@ -226,6 +243,7 @@ export class BattlefieldScene extends Phaser.Scene {
   }
 
   public update(_time: number, delta: number): void {
+    if (this.isPaused) return;
     if (this.isLeaderboardOpen || this.isNicknameDialogOpen) return;
 
     if (this.phase === 'preparation') {
@@ -390,6 +408,59 @@ export class BattlefieldScene extends Phaser.Scene {
       .setVisible(false);
 
     this.updatePhaseInterface();
+  }
+
+  private createGameControls(): void {
+    this.pauseMenu = new PauseMenu(this, {
+      pause: () => this.pauseGame(),
+      resume: () => this.resumeGame(),
+      exitToOpening: () => this.exitToOpening(),
+    });
+    this.audioControlPanel = new AudioControlPanel(this, this.audioDirector);
+    this.syncPauseAvailability();
+  }
+
+  private pauseGame(): void {
+    if (this.isPaused || !this.canPause()) return;
+    this.isPaused = true;
+    this.time.paused = true;
+    this.tweens.pauseAll();
+    this.pauseMenu?.open();
+    this.syncCanvasAccessibilityState();
+  }
+
+  private resumeGame(): void {
+    if (!this.isPaused) return;
+    this.isPaused = false;
+    this.time.paused = false;
+    this.tweens.resumeAll();
+    this.pauseMenu?.close();
+    this.syncCanvasAccessibilityState();
+  }
+
+  private exitToOpening(): void {
+    if (!this.isPaused) return;
+    this.isPaused = false;
+    this.time.paused = false;
+    this.tweens.resumeAll();
+    this.audioControlPanel?.close();
+    this.pauseMenu?.close();
+    this.scene.restart();
+  }
+
+  private canPause(): boolean {
+    if (this.isLeaderboardOpen || this.isNicknameDialogOpen) return false;
+    return (
+      this.phase === 'preparation' ||
+      this.phase === 'combat' ||
+      this.phase === 'role-reversal' ||
+      this.phase === 'attack-preparation' ||
+      this.phase === 'attack-combat'
+    );
+  }
+
+  private syncPauseAvailability(): void {
+    this.pauseMenu?.setPauseAvailable(this.canPause());
   }
 
   private createTutorialOverlay(): void {
@@ -781,6 +852,19 @@ export class BattlefieldScene extends Phaser.Scene {
   private configureKeyboardInput(): void {
     this.input.keyboard?.on('keydown', (event: KeyboardEvent) => {
       this.audioDirector.startMusic();
+      if (this.isPaused) {
+        if (event.code === 'Escape') {
+          event.preventDefault();
+          event.stopImmediatePropagation();
+          this.resumeGame();
+          return;
+        }
+        if (event.code !== 'KeyM') {
+          event.preventDefault();
+          event.stopImmediatePropagation();
+          return;
+        }
+      }
       if (this.isLeaderboardOpen && event.code === 'Escape') {
         event.preventDefault();
         event.stopImmediatePropagation();
@@ -808,6 +892,7 @@ export class BattlefieldScene extends Phaser.Scene {
 
     this.input.keyboard?.on('keydown-M', () => {
       const muted = this.audioDirector.toggleMute();
+      this.audioControlPanel?.refresh();
       this.setStatus(muted ? '모든 소리를 껐습니다.' : '효과음과 배경음악을 켰습니다.');
     });
 
@@ -997,16 +1082,17 @@ export class BattlefieldScene extends Phaser.Scene {
         return;
       }
       if (
-        this.phase !== 'attack-combat' ||
-        (!this.isFocusTargeting && !this.isDisruptTargeting)
+        this.phase === 'attack-combat' &&
+        (this.isFocusTargeting || this.isDisruptTargeting)
       ) {
+        const cancelledAbility = this.isFocusTargeting ? '집중 공격' : '교란';
+        this.isFocusTargeting = false;
+        this.isDisruptTargeting = false;
+        this.setStatus(`${cancelledAbility} 대상 선택을 취소했습니다.`);
+        this.renderBattlefield();
         return;
       }
-      const cancelledAbility = this.isFocusTargeting ? '집중 공격' : '교란';
-      this.isFocusTargeting = false;
-      this.isDisruptTargeting = false;
-      this.setStatus(`${cancelledAbility} 대상 선택을 취소했습니다.`);
-      this.renderBattlefield();
+      this.pauseGame();
     });
 
     this.input.keyboard?.on('keydown-C', () => {
@@ -2032,6 +2118,7 @@ export class BattlefieldScene extends Phaser.Scene {
 
   private updatePhaseInterface(): void {
     this.syncCanvasAccessibilityState();
+    this.syncPauseAvailability();
     if (this.phase === 'tutorial') {
       this.phaseText.setText('장난감 전쟁');
       this.combatInfoText.setText(
@@ -2172,6 +2259,7 @@ export class BattlefieldScene extends Phaser.Scene {
       'campaign-complete': '일반 모드 완료',
     };
     this.game.canvas.dataset.gamePhase = this.phase;
+    this.game.canvas.dataset.gamePaused = String(this.isPaused);
     this.game.canvas.dataset.guideStage = this.firstRunGuide.stage;
     this.game.canvas.dataset.guideMode = this.firstRunGuide.isDetailed
       ? 'detailed'
@@ -2251,6 +2339,7 @@ export class BattlefieldScene extends Phaser.Scene {
       '',
       '[Tab] 순위표  [N] 닉네임',
       '[M] 소리 켜기/끄기',
+      '[Esc] 일시정지',
     ].join('\n');
   }
 
@@ -2269,6 +2358,7 @@ export class BattlefieldScene extends Phaser.Scene {
       '[Space] 공격 시작',
       '[Tab] 순위표  [N] 닉네임',
       '[M] 소리 켜기/끄기',
+      '[Esc] 일시정지',
       '',
       `진입로별 처음 ${SIMULTANEOUS_CAPACITY_PER_LANE}명은 동시에`,
       `나머지는 ${SQUAD_SPAWN_INTERVAL_MS / 1000}초 간격 출격합니다.`,
@@ -2290,6 +2380,7 @@ export class BattlefieldScene extends Phaser.Scene {
       '시설과 코어를 공격합니다.',
       '지휘관 사망 시 즉시 실패합니다.',
       '[M] 소리 켜기/끄기',
+      '[Esc] 대상 취소 / 일시정지',
     ].join('\n');
   }
 

@@ -1,6 +1,12 @@
 import type Phaser from 'phaser';
+import type { AudioSettingsService } from '../../application/AudioSettingsService';
 import type { CombatAttackStyle, CombatEvent } from '../../domain/combat/CombatEvent';
+import type { AudioSettingsSnapshot } from '../../ports/AudioSettingsRepository';
 import { AUDIO_ASSETS } from '../assets/GameAssets';
+import {
+  SingleTrackMusicController,
+  type MusicHandle,
+} from './SingleTrackMusicController';
 
 const SHOT_SOUND: Readonly<Record<CombatAttackStyle, string>> = {
   popgun: AUDIO_ASSETS.shotPopgun,
@@ -11,28 +17,63 @@ const SHOT_SOUND: Readonly<Record<CombatAttackStyle, string>> = {
 };
 
 export class BattlefieldAudioDirector {
-  private music: Phaser.Sound.BaseSound | null = null;
-  private muted = false;
+  private readonly musicController: SingleTrackMusicController;
   private lastPlayedAt = new Map<string, number>();
 
-  public constructor(private readonly scene: Phaser.Scene) {}
+  public constructor(
+    private readonly scene: Phaser.Scene,
+    private readonly settingsService: AudioSettingsService,
+  ) {
+    this.musicController = new SingleTrackMusicController({
+      list: () =>
+        scene.sound
+          .getAll(AUDIO_ASSETS.music)
+          .map((sound) => new PhaserMusicHandle(sound)),
+      create: () =>
+        new PhaserMusicHandle(
+          scene.sound.add(AUDIO_ASSETS.music, {
+            loop: true,
+          }),
+        ),
+      remove: (sound: MusicHandle) => {
+        if (sound instanceof PhaserMusicHandle) {
+          scene.sound.remove(sound.sound);
+        }
+      },
+    });
+    this.applyMute();
+  }
+
+  public get settings(): AudioSettingsSnapshot {
+    return this.settingsService.settings;
+  }
 
   public startMusic(): void {
-    if (this.music !== null || this.muted || !this.scene.cache.audio.exists(AUDIO_ASSETS.music)) {
+    if (
+      this.settings.muted ||
+      !this.scene.cache.audio.exists(AUDIO_ASSETS.music)
+    ) {
       return;
     }
-    this.music = this.scene.sound.add(AUDIO_ASSETS.music, {
-      loop: true,
-      volume: 0.2,
-    });
-    this.music.play();
+    this.musicController.start(this.settings.musicVolume);
   }
 
   public toggleMute(): boolean {
-    this.muted = !this.muted;
-    this.scene.sound.mute = this.muted;
-    if (!this.muted) this.startMusic();
-    return this.muted;
+    const settings = this.settingsService.toggleMute();
+    this.applyMute();
+    if (!settings.muted) this.startMusic();
+    return settings.muted;
+  }
+
+  public setMusicVolume(volume: number): AudioSettingsSnapshot {
+    const settings = this.settingsService.setMusicVolume(volume);
+    this.musicController.setVolume(settings.musicVolume);
+    if (!settings.muted) this.startMusic();
+    return settings;
+  }
+
+  public setEffectsVolume(volume: number): AudioSettingsSnapshot {
+    return this.settingsService.setEffectsVolume(volume);
   }
 
   public playUi(kind: 'click' | 'confirm' | 'error'): void {
@@ -72,12 +113,37 @@ export class BattlefieldAudioDirector {
   }
 
   private playThrottled(key: string, volume: number, throttleMs: number): void {
-    if (this.muted || !this.scene.cache.audio.exists(key)) return;
+    if (this.settings.muted || !this.scene.cache.audio.exists(key)) return;
     const now = this.scene.time.now;
     if (now - (this.lastPlayedAt.get(key) ?? Number.NEGATIVE_INFINITY) < throttleMs) {
       return;
     }
     this.lastPlayedAt.set(key, now);
-    this.scene.sound.play(key, { volume });
+    this.scene.sound.play(key, {
+      volume: volume * this.settings.effectsVolume,
+    });
+  }
+
+  private applyMute(): void {
+    this.scene.sound.mute = this.settings.muted;
+  }
+}
+
+class PhaserMusicHandle implements MusicHandle {
+  public constructor(public readonly sound: Phaser.Sound.BaseSound) {}
+
+  public get isPlaying(): boolean {
+    return this.sound.isPlaying;
+  }
+
+  public play(): boolean {
+    return this.sound.play();
+  }
+
+  public setVolume(volume: number): unknown {
+    const adjustableSound = this.sound as
+      | Phaser.Sound.HTML5AudioSound
+      | Phaser.Sound.WebAudioSound;
+    return adjustableSound.setVolume(volume);
   }
 }

@@ -1,0 +1,89 @@
+import type Phaser from 'phaser';
+
+export interface TextButtonColors {
+  readonly fill: number;
+  readonly hover: number;
+  readonly stroke: number;
+  readonly text: string;
+}
+
+const DEFAULT_COLORS: TextButtonColors = {
+  fill: 0x342f49,
+  hover: 0x48405f,
+  stroke: 0x9fe3c3,
+  text: '#f8f4e8',
+};
+
+export class TextButton {
+  public readonly gameObject: Phaser.GameObjects.Container;
+  private readonly background: Phaser.GameObjects.Rectangle;
+  private readonly label: Phaser.GameObjects.Text;
+  private enabled = true;
+
+  public constructor(
+    scene: Phaser.Scene,
+    x: number,
+    y: number,
+    width: number,
+    height: number,
+    label: string,
+    onClick: () => void,
+    colors: TextButtonColors = DEFAULT_COLORS,
+  ) {
+    this.background = scene.add
+      .rectangle(0, 0, width, height, colors.fill, 1)
+      .setStrokeStyle(2, colors.stroke, 0.95)
+      .setInteractive({ useHandCursor: true });
+    this.label = scene.add
+      .text(0, 0, label, {
+        color: colors.text,
+        fontFamily: 'Arial, sans-serif',
+        fontSize: '16px',
+        fontStyle: 'bold',
+      })
+      .setOrigin(0.5);
+    this.gameObject = scene.add.container(x, y, [this.background, this.label]);
+
+    this.background.on(
+      'pointerdown',
+      (
+        _pointer: Phaser.Input.Pointer,
+        _localX: number,
+        _localY: number,
+        event: Phaser.Types.Input.EventData,
+      ) => {
+        event.stopPropagation();
+        if (this.enabled) onClick();
+      },
+    );
+    this.background.on('pointerover', () => {
+      if (this.enabled) this.background.setFillStyle(colors.hover, 1);
+    });
+    this.background.on('pointerout', () => {
+      this.background.setFillStyle(colors.fill, 1);
+    });
+  }
+
+  public setLabel(label: string): void {
+    this.label.setText(label);
+  }
+
+  public setEnabled(enabled: boolean): void {
+    if (this.enabled === enabled) return;
+    this.enabled = enabled;
+    this.gameObject.setAlpha(enabled ? 1 : 0.42);
+    if (enabled) {
+      this.background.setInteractive({ useHandCursor: true });
+    } else {
+      this.background.disableInteractive();
+    }
+  }
+
+  public setVisible(visible: boolean): void {
+    this.gameObject.setVisible(visible);
+  }
+
+  public setDepth(depth: number): void {
+    this.gameObject.setDepth(depth);
+  }
+}
