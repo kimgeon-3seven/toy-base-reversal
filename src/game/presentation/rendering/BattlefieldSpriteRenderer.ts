@@ -18,19 +18,15 @@ import {
   type BattlefieldSpriteState,
 } from './BattlefieldSpriteView';
 import { FacingDirectionResolver } from './FacingDirectionResolver';
+import { SpriteFacingProfile } from './SpriteFacingProfile';
 
 interface SpriteDescriptor extends BattlefieldSpriteState {
   readonly id: string;
 }
 
-const NATURAL_FACING = {
-  up: -90,
-  right: 0,
-  left: 180,
-} as const;
-
 export class BattlefieldSpriteRenderer {
   private readonly facingResolver = new FacingDirectionResolver();
+  private readonly facingProfile = new SpriteFacingProfile();
   private readonly structures = new Map<string, BattlefieldSpriteView>();
   private readonly defenders = new Map<string, BattlefieldSpriteView>();
   private readonly attackers = new Map<string, BattlefieldSpriteView>();
@@ -64,7 +60,7 @@ export class BattlefieldSpriteRenderer {
         y: point.y,
         displaySize: structure.kind === 'obstacle' ? 53 : 58,
         depth: 12,
-        naturalFacingDegrees: this.naturalFacingFor(texture),
+        naturalFacingDegrees: this.facingProfile.naturalFacingDegrees(texture),
         initialFacingDegrees: 0,
         facingMode: structure.kind === 'tower' ? 'free' : 'static',
         enableMovementBob: false,
@@ -90,7 +86,7 @@ export class BattlefieldSpriteRenderer {
         y: point.y,
         displaySize: enemy.stats.archetype === 'tank' ? 60 : 54,
         depth: 15,
-        naturalFacingDegrees: this.naturalFacingFor(texture),
+        naturalFacingDegrees: this.facingProfile.naturalFacingDegrees(texture),
         initialFacingDegrees: 0,
         facingMode: 'eight-way',
         enableMovementBob: true,
@@ -115,7 +111,7 @@ export class BattlefieldSpriteRenderer {
         y: point.y,
         displaySize: unit.kind === 'tank' ? 60 : 54,
         depth: 16,
-        naturalFacingDegrees: this.naturalFacingFor(texture),
+        naturalFacingDegrees: this.facingProfile.naturalFacingDegrees(texture),
         initialFacingDegrees: 0,
         facingMode: 'eight-way',
         enableMovementBob: true,
@@ -138,7 +134,9 @@ export class BattlefieldSpriteRenderer {
       y: point.y,
       displaySize: 64,
       depth: 17,
-      naturalFacingDegrees: NATURAL_FACING.up,
+      naturalFacingDegrees: this.facingProfile.naturalFacingDegrees(
+        IMAGE_ASSETS.commander,
+      ),
       initialFacingDegrees: 0,
       facingMode: 'eight-way',
       enableMovementBob: true,
@@ -271,12 +269,6 @@ export class BattlefieldSpriteRenderer {
     if (structure.towerArchetype === 'mortar') return IMAGE_ASSETS.towerMortar;
     if (structure.towerArchetype === 'piercer') return IMAGE_ASSETS.towerPiercer;
     return IMAGE_ASSETS.towerPopgun;
-  }
-
-  private naturalFacingFor(texture: string): number {
-    if (texture === IMAGE_ASSETS.attackerTank) return NATURAL_FACING.right;
-    if (texture === IMAGE_ASSETS.towerPopgun) return NATURAL_FACING.left;
-    return NATURAL_FACING.up;
   }
 
   private toWorld(column: number, row: number): Phaser.Math.Vector2 {
