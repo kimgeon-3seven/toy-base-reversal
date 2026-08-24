@@ -16,11 +16,17 @@ describe('DirectionalAnimationCatalog', () => {
   it('resolves reusable animation profiles by combat archetype', () => {
     expect(catalog.profileForUnit('tank')?.id).toBe('shield');
     expect(catalog.profileForUnit('swarm')?.id).toBe('windup');
-    expect(catalog.profileForUnit('ranger')).toBeNull();
+    expect(catalog.profileForUnit('ranger')?.id).toBe('ranger');
   });
 
   it('uses all four generated walk frames for the wind-up unit', () => {
     expect(catalog.profileForUnit('swarm')?.walkFrameOffsets).toEqual([
+      0, 1, 2, 3,
+    ]);
+  });
+
+  it('uses all four generated walk frames for the rubber-band ranger', () => {
+    expect(catalog.profileForUnit('ranger')?.walkFrameOffsets).toEqual([
       0, 1, 2, 3,
     ]);
   });

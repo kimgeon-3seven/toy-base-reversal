@@ -45,11 +45,19 @@ const WINDUP_PROFILE: DirectionalAnimationProfile = {
   walkFrameOffsets: [0, 1, 2, 3],
 };
 
+const RANGER_PROFILE: DirectionalAnimationProfile = {
+  id: 'ranger',
+  walkTexture: IMAGE_ASSETS.attackerRangerWalk,
+  attackTexture: IMAGE_ASSETS.attackerRangerAttack,
+  walkFrameOffsets: [0, 1, 2, 3],
+};
+
 const UNIT_PROFILES: Readonly<
   Partial<Record<UnitArchetype, DirectionalAnimationProfile>>
 > = {
   tank: SHIELD_PROFILE,
   swarm: WINDUP_PROFILE,
+  ranger: RANGER_PROFILE,
 };
 
 export class DirectionalAnimationCatalog {

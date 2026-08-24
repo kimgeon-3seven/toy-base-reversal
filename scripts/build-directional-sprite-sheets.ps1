@@ -6,7 +6,9 @@ param(
   [string]$WalkOutput,
 
   [Parameter(Mandatory = $true)]
-  [string]$AttackOutput
+  [string]$AttackOutput,
+
+  [switch]$MirrorLeftDirections
 )
 
 Set-StrictMode -Version Latest
@@ -120,6 +122,12 @@ $directions = @(
   'west',
   'northwest'
 )
+
+$mirroredSourceDirections = @{
+  southwest = 'southeast'
+  west = 'east'
+  northwest = 'northeast'
+}
 
 $cellSize = 160
 $contentWidth = 140
@@ -322,7 +330,14 @@ foreach ($graphics in @($walkGraphics, $attackGraphics)) {
 try {
   for ($directionIndex = 0; $directionIndex -lt $directions.Count; $directionIndex += 1) {
     $direction = $directions[$directionIndex]
-    $sourcePath = Join-Path $InputDirectory "$direction.png"
+    $isMirroredDirection =
+      $MirrorLeftDirections -and $mirroredSourceDirections.ContainsKey($direction)
+    $sourceDirection = if ($isMirroredDirection) {
+      $mirroredSourceDirections[$direction]
+    } else {
+      $direction
+    }
+    $sourcePath = Join-Path $InputDirectory "$sourceDirection.png"
     if (-not (Test-Path -LiteralPath $sourcePath)) {
       throw "Missing source sheet: $sourcePath"
     }
@@ -343,6 +358,11 @@ try {
             $bottom
           )
           $frame = Remove-ChromaBackground $source $sourceBounds
+          if ($isMirroredDirection) {
+            $frame.RotateFlip(
+              [System.Drawing.RotateFlipType]::RotateNoneFlipX
+            )
+          }
           $minimumComponentPixels = [Math]::Max(
             1200,
             [int][Math]::Round($frame.Width * $frame.Height * 0.03)
