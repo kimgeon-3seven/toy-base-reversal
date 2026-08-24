@@ -88,6 +88,28 @@ function battlefield(): Battlefield {
   );
 }
 
+function movementRegressionConfig(): AttackCombatConfig {
+  return {
+    ...config,
+    unitStats: {
+      ...config.unitStats,
+      tank: {
+        ...config.unitStats.tank,
+        movementSpeed: 1,
+        attackDamage: 10,
+        attackRange: 1.5,
+      },
+    },
+    towers: {
+      ...config.towers,
+      popgun: {
+        ...config.towers.popgun,
+        damage: 1,
+      },
+    },
+  };
+}
+
 describe('AttackCombat', () => {
   it('wins when automatic units destroy the core', () => {
     const field = battlefield();
@@ -99,6 +121,87 @@ describe('AttackCombat', () => {
 
     expect(combat.coreHealth).toBe(0);
     expect(combat.state).toBe('won');
+  });
+
+  it('finishes the active grid step before attacking an obstacle', () => {
+    const field = battlefield();
+    const wall = new DefenseStructure(
+      'wall',
+      'obstacle',
+      new GridPosition(2, 1),
+      500,
+    );
+    field.place(wall);
+    const plan = new SquadPlan(10, 2, 1);
+    plan.addUnit(0, 'tank');
+    const combat = new AttackCombat(field, plan, movementRegressionConfig());
+
+    combat.update(500);
+    const unit = combat.units[0];
+    expect(unit?.renderColumn).toBeCloseTo(0.5);
+
+    combat.update(50);
+    expect(unit?.renderColumn).toBeCloseTo(0.55);
+    expect(wall.health).toBe(500);
+
+    combat.update(500);
+    expect(unit?.position).toEqual(new GridPosition(1, 1));
+    expect(unit?.renderColumn).toBe(1);
+    expect(wall.health).toBe(490);
+
+    combat.update(50);
+    expect(unit?.renderColumn).toBe(1);
+  });
+
+  it('finishes the active grid step before attacking the core', () => {
+    const field = battlefield();
+    const plan = new SquadPlan(10, 2, 1);
+    plan.addUnit(0, 'tank');
+    const combat = new AttackCombat(field, plan, movementRegressionConfig());
+
+    combat.update(1_500);
+    const unit = combat.units[0];
+    expect(unit?.renderColumn).toBeCloseTo(1.5);
+
+    combat.update(50);
+    expect(unit?.renderColumn).toBeCloseTo(1.55);
+    expect(combat.coreHealth).toBe(config.coreMaxHealth);
+
+    combat.update(500);
+    expect(unit?.position).toEqual(new GridPosition(2, 1));
+    expect(unit?.renderColumn).toBe(2);
+    expect(combat.coreHealth).toBe(50);
+
+    combat.update(50);
+    expect(unit?.renderColumn).toBe(2);
+  });
+
+  it('does not rewind an active grid step when focus fire changes the target', () => {
+    const field = battlefield();
+    const target = new DefenseStructure(
+      'target',
+      'tower',
+      new GridPosition(2, 1),
+      500,
+    );
+    field.place(target);
+    const plan = new SquadPlan(10, 2, 1);
+    plan.addUnit(0, 'tank');
+    const combat = new AttackCombat(field, plan, movementRegressionConfig());
+
+    combat.update(450);
+    const unit = combat.units[0];
+    expect(unit?.renderColumn).toBeCloseTo(0.45);
+    expect(combat.issueFocusFire('target').success).toBe(true);
+
+    combat.update(100);
+    expect(unit?.renderColumn).toBeCloseTo(0.55);
+    expect(target.health).toBe(500);
+
+    combat.update(500);
+    expect(unit?.position).toEqual(new GridPosition(1, 1));
+    expect(unit?.renderColumn).toBe(1);
+    expect(target.health).toBe(483.5);
   });
 
   it('loses immediately when the commander is defeated', () => {
@@ -209,7 +312,7 @@ describe('AttackCombat', () => {
   it('freezes a disrupted tower attack cooldown until the effect ends', () => {
     const field = battlefield();
     field.place(
-      new DefenseStructure('tower', 'tower', new GridPosition(1, 0), 500),
+      new DefenseStructure('tower', 'tower', new GridPosition(1, 0), 5_000),
     );
     const plan = new SquadPlan(10, 2, 1);
     plan.addUnit(0, 'tank');
