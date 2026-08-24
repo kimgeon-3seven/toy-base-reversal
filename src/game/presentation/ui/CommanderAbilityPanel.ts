@@ -39,20 +39,14 @@ export class CommanderAbilityPanel {
     onDisrupt: () => void,
   ) {
     const ui = new ToyUiFactory(scene);
-    const panel = ui.createPaperPanel(264, 112, {
+    const panel = ui.createPaperPanel(264, 78, {
       accent: TOY_UI.teal,
       tape: false,
     });
-    const title = scene.add.text(16, 10, '지휘관 명령', {
-      color: '#0b615a',
-      fontFamily: TOY_UI.fontFamily,
-      fontSize: '12px',
-      fontStyle: 'bold',
-    });
     this.focusCard = this.createCard(
       scene,
-      12,
-      38,
+      8,
+      9,
       'Q',
       '집중 공격',
       TOY_UI.teal,
@@ -60,8 +54,8 @@ export class CommanderAbilityPanel {
     );
     this.disruptCard = this.createCard(
       scene,
-      136,
-      38,
+      134,
+      9,
       'E',
       '교란',
       0x8267c7,
@@ -70,7 +64,6 @@ export class CommanderAbilityPanel {
     this.container = scene.add
       .container(1004, 552, [
         ...panel,
-        title,
         ...this.cardObjects(this.focusCard),
         ...this.cardObjects(this.disruptCard),
       ])
@@ -95,7 +88,7 @@ export class CommanderAbilityPanel {
     onClick: () => void,
   ): AbilityCard {
     const background = scene.add
-      .rectangle(x, y, 116, 62, 0xf0dfb8, 0.98)
+      .rectangle(x, y, 122, 58, 0xf0dfb8, 0.98)
       .setOrigin(0)
       .setStrokeStyle(2, color, 0.75)
       .setInteractive({ useHandCursor: true })
@@ -112,7 +105,7 @@ export class CommanderAbilityPanel {
         },
       );
     const key = scene.add
-      .text(x + 12, y + 13, keyLabel, {
+      .text(x + 13, y + 14, keyLabel, {
         backgroundColor: color === TOY_UI.teal ? '#0b615a' : '#5e4c91',
         color: '#ffffff',
         fontFamily: TOY_UI.fontFamily,
@@ -121,14 +114,14 @@ export class CommanderAbilityPanel {
         padding: { x: 5, y: 3 },
       })
       .setOrigin(0.5);
-    const name = scene.add.text(x + 27, y + 6, nameLabel, {
+    const name = scene.add.text(x + 30, y + 7, nameLabel, {
       color: TOY_UI.ink,
       fontFamily: TOY_UI.fontFamily,
       fontSize: '13px',
       fontStyle: 'bold',
     });
     const state = scene.add
-      .text(x + 106, y + 30, '', {
+      .text(x + 112, y + 29, '', {
         color: '#0b615a',
         fontFamily: TOY_UI.fontFamily,
         fontSize: '11px',
@@ -136,10 +129,10 @@ export class CommanderAbilityPanel {
       })
       .setOrigin(1, 0);
     const track = scene.add
-      .rectangle(x + 8, y + 53, 100, 5, 0xc7af82, 1)
+      .rectangle(x + 9, y + 50, 104, 5, 0xc7af82, 1)
       .setOrigin(0, 0.5);
     const progress = scene.add
-      .rectangle(x + 8, y + 53, 100, 5, color, 1)
+      .rectangle(x + 9, y + 50, 104, 5, color, 1)
       .setOrigin(0, 0.5);
     background.on('pointerover', () => background.setFillStyle(0xfff5d9, 1));
     background.on('pointerout', () => background.setFillStyle(0xf0dfb8, 0.98));
@@ -155,7 +148,7 @@ export class CommanderAbilityPanel {
       model.cooldownDurationMs <= 0
         ? 1
         : 1 - model.cooldownRemainingMs / model.cooldownDurationMs;
-    card.progress.setDisplaySize(100 * Phaser.Math.Clamp(readyRatio, 0, 1), 5);
+    card.progress.setDisplaySize(104 * Phaser.Math.Clamp(readyRatio, 0, 1), 5);
     const labels: Readonly<Record<CommanderAbilityState, string>> = {
       ready: '준비',
       cooldown: `${Math.ceil(model.cooldownRemainingMs / 1000)}초`,
