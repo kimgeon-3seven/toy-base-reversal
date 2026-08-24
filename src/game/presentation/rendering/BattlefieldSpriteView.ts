@@ -5,9 +5,9 @@ import type {
   DirectionalAnimationCatalog,
   DirectionalAnimationProfile,
 } from './DirectionalAnimationCatalog';
+import { SpriteAttackFeedbackResolver } from './SpriteAttackFeedbackResolver';
 import { SpriteAnimationStateMachine } from './SpriteAnimationStateMachine';
-
-export type SpriteFacingMode = 'static' | 'eight-way' | 'free';
+import type { SpriteFacingMode } from './SpriteFacingMode';
 
 const WALK_STOP_GRACE_DURATION_MS = 48;
 
@@ -37,6 +37,7 @@ export class BattlefieldSpriteView {
   private readonly toyBase: Phaser.GameObjects.Ellipse;
   private readonly image: Phaser.GameObjects.Sprite;
   private readonly animationState = new SpriteAnimationStateMachine();
+  private readonly attackFeedbackResolver: SpriteAttackFeedbackResolver;
   private currentState: BattlefieldSpriteState;
   private worldFacingDegrees: number;
   private renderedRotationDegrees: number;
@@ -60,6 +61,9 @@ export class BattlefieldSpriteView {
     initialState: BattlefieldSpriteState,
   ) {
     this.currentState = initialState;
+    this.attackFeedbackResolver = new SpriteAttackFeedbackResolver(
+      facingResolver,
+    );
     this.worldFacingDegrees = initialState.initialFacingDegrees;
     this.renderedRotationDegrees = facingResolver.spriteRotationDegrees(
       this.worldFacingDegrees,
@@ -211,21 +215,22 @@ export class BattlefieldSpriteView {
   public playAttackToward(targetX: number, targetY: number): void {
     const deltaX = targetX - this.currentState.x;
     const deltaY = targetY - this.currentState.y;
-    const length = Math.hypot(deltaX, deltaY);
-    if (length < 0.0001 || this.currentState.facingMode === 'static') return;
+    const feedback = this.attackFeedbackResolver.resolve(
+      this.currentState.facingMode,
+      deltaX,
+      deltaY,
+    );
+    if (feedback.facingDegrees !== null) {
+      this.worldFacingDegrees = feedback.facingDegrees;
+    }
 
-    const direction =
-      this.currentState.facingMode === 'eight-way'
-        ? this.facingResolver.eightWayDegrees(deltaX, deltaY)
-        : this.facingResolver.directionDegrees(deltaX, deltaY);
-    if (direction !== null) this.worldFacingDegrees = direction;
-
-    this.attackFacingUntilMs = this.scene.time.now + 220;
-    this.animationState.beginAttack(this.scene.time.now, 340);
+    const now = this.scene.time.now;
+    this.attackFacingUntilMs = now + 220;
+    this.animationState.beginAttack(now, 340);
     this.currentAnimationKey = null;
-    this.recoilUntilMs = this.scene.time.now + 120;
-    this.recoilX = (-deltaX / length) * 4;
-    this.recoilY = (-deltaY / length) * 4;
+    this.recoilUntilMs = now + 120;
+    this.recoilX = feedback.recoilX;
+    this.recoilY = feedback.recoilY;
   }
 
   public flashHit(effectiveness: CombatHitEffectiveness): void {
