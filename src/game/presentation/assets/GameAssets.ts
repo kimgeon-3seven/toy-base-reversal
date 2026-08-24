@@ -13,6 +13,8 @@ export const IMAGE_ASSETS = {
   attackerTankWalk: 'attacker-tank-walk-8way',
   attackerTankAttack: 'attacker-tank-attack-8way',
   attackerSwarm: 'attacker-swarm',
+  attackerSwarmWalk: 'attacker-swarm-walk-8way',
+  attackerSwarmAttack: 'attacker-swarm-attack-8way',
   attackerRanger: 'attacker-ranger',
   commander: 'commander',
   core: 'core',
@@ -70,6 +72,16 @@ export function preloadGameAssets(loader: Phaser.Loader.LoaderPlugin): void {
     { frameWidth: 160, frameHeight: 160 },
   );
   loader.image(IMAGE_ASSETS.attackerSwarm, assetUrl(`${sprites}/unit-windup-v2.png`));
+  loader.spritesheet(
+    IMAGE_ASSETS.attackerSwarmWalk,
+    assetUrl(`${sprites}/unit-windup-walk-8way-v1.png`),
+    { frameWidth: 160, frameHeight: 160 },
+  );
+  loader.spritesheet(
+    IMAGE_ASSETS.attackerSwarmAttack,
+    assetUrl(`${sprites}/unit-windup-attack-8way-v1.png`),
+    { frameWidth: 160, frameHeight: 160 },
+  );
   loader.image(IMAGE_ASSETS.attackerRanger, assetUrl(`${sprites}/unit-ranger-v2.png`));
   loader.image(IMAGE_ASSETS.commander, assetUrl(`${sprites}/commander-v2.png`));
   loader.image(IMAGE_ASSETS.core, assetUrl(`${sprites}/core-v2.png`));

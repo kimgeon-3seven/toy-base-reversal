@@ -13,10 +13,16 @@ describe('DirectionalAnimationCatalog', () => {
     expect(catalog.directionForDegrees(-135)).toBe('northwest');
   });
 
-  it('enables the shared profile only for shield units on either team', () => {
+  it('resolves reusable animation profiles by combat archetype', () => {
     expect(catalog.profileForUnit('tank')?.id).toBe('shield');
-    expect(catalog.profileForUnit('swarm')).toBeNull();
+    expect(catalog.profileForUnit('swarm')?.id).toBe('windup');
     expect(catalog.profileForUnit('ranger')).toBeNull();
+  });
+
+  it('uses all four generated walk frames for the wind-up unit', () => {
+    expect(catalog.profileForUnit('swarm')?.walkFrameOffsets).toEqual([
+      0, 1, 2, 3,
+    ]);
   });
 
   it('uses the first walk frame as the idle pose', () => {

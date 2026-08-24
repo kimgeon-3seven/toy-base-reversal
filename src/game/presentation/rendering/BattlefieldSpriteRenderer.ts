@@ -132,6 +132,9 @@ export class BattlefieldSpriteRenderer {
   public renderDefenders(enemies: readonly DefenseEnemy[]): void {
     const descriptors = enemies.map((enemy): SpriteDescriptor => {
       const point = this.toWorld(enemy.renderColumn, enemy.renderRow);
+      const animationProfile = this.animationCatalog.profileForUnit(
+        enemy.stats.archetype,
+      );
       const texture =
         enemy.stats.archetype === 'tank'
           ? IMAGE_ASSETS.defenderTank
@@ -151,15 +154,13 @@ export class BattlefieldSpriteRenderer {
               : 56,
         depth: 15,
         baseColor: 0xe95e4f,
-        tint: enemy.stats.archetype === 'tank' ? undefined : 0xff8b82,
+        tint: animationProfile === null ? 0xff8b82 : undefined,
         naturalFacingDegrees: this.facingProfile.naturalFacingDegrees(texture),
         initialFacingDegrees: 0,
         facingMode: 'eight-way',
         enableMovementBob: true,
         isMoving: enemy.isMoving,
-        animationProfile: this.animationCatalog.profileForUnit(
-          enemy.stats.archetype,
-        ),
+        animationProfile,
       };
     });
     this.sync(this.defenders, descriptors);
@@ -168,6 +169,7 @@ export class BattlefieldSpriteRenderer {
   public renderAttackers(units: readonly AttackUnit[]): void {
     const descriptors = units.map((unit): SpriteDescriptor => {
       const point = this.toWorld(unit.renderColumn, unit.renderRow);
+      const animationProfile = this.animationCatalog.profileForUnit(unit.kind);
       const texture =
         unit.kind === 'tank'
           ? IMAGE_ASSETS.attackerTank
@@ -183,13 +185,13 @@ export class BattlefieldSpriteRenderer {
           unit.kind === 'tank' ? 68 : unit.kind === 'ranger' ? 62 : 56,
         depth: 16,
         baseColor: 0x159b8c,
-        tint: unit.kind === 'tank' ? undefined : 0x79e5d8,
+        tint: animationProfile === null ? 0x79e5d8 : undefined,
         naturalFacingDegrees: this.facingProfile.naturalFacingDegrees(texture),
         initialFacingDegrees: 0,
         facingMode: 'eight-way',
         enableMovementBob: true,
         isMoving: unit.isMoving,
-        animationProfile: this.animationCatalog.profileForUnit(unit.kind),
+        animationProfile,
       };
     });
     this.sync(this.attackers, descriptors);

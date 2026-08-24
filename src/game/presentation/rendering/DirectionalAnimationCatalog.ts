@@ -17,6 +17,7 @@ export interface DirectionalAnimationProfile {
   readonly id: string;
   readonly walkTexture: string;
   readonly attackTexture: string;
+  readonly walkFrameOffsets: readonly number[];
 }
 
 const DIRECTIONS: readonly SpriteDirection[] = [
@@ -34,13 +35,28 @@ const SHIELD_PROFILE: DirectionalAnimationProfile = {
   id: 'shield',
   walkTexture: IMAGE_ASSETS.attackerTankWalk,
   attackTexture: IMAGE_ASSETS.attackerTankAttack,
+  walkFrameOffsets: [0, 1, 2, 1],
+};
+
+const WINDUP_PROFILE: DirectionalAnimationProfile = {
+  id: 'windup',
+  walkTexture: IMAGE_ASSETS.attackerSwarmWalk,
+  attackTexture: IMAGE_ASSETS.attackerSwarmAttack,
+  walkFrameOffsets: [0, 1, 2, 3],
+};
+
+const UNIT_PROFILES: Readonly<
+  Partial<Record<UnitArchetype, DirectionalAnimationProfile>>
+> = {
+  tank: SHIELD_PROFILE,
+  swarm: WINDUP_PROFILE,
 };
 
 export class DirectionalAnimationCatalog {
   public profileForUnit(
     archetype: UnitArchetype,
   ): DirectionalAnimationProfile | null {
-    return archetype === 'tank' ? SHIELD_PROFILE : null;
+    return UNIT_PROFILES[archetype] ?? null;
   }
 
   public directionForDegrees(degrees: number): SpriteDirection {
@@ -72,7 +88,9 @@ export class DirectionalAnimationCatalog {
   }
 
   public register(scene: Phaser.Scene): void {
-    this.registerProfile(scene, SHIELD_PROFILE);
+    for (const profile of Object.values(UNIT_PROFILES)) {
+      if (profile !== undefined) this.registerProfile(scene, profile);
+    }
   }
 
   private registerProfile(
@@ -99,10 +117,9 @@ export class DirectionalAnimationCatalog {
     if (scene.anims.exists(key)) return;
     const texture = action === 'walk' ? profile.walkTexture : profile.attackTexture;
     const firstFrame = row * 4;
-    const frameNumbers =
-      action === 'walk'
-        ? [firstFrame, firstFrame + 1, firstFrame + 2, firstFrame + 1]
-        : [firstFrame, firstFrame + 1, firstFrame + 2, firstFrame + 3];
+    const frameOffsets =
+      action === 'walk' ? profile.walkFrameOffsets : [0, 1, 2, 3];
+    const frameNumbers = frameOffsets.map((offset) => firstFrame + offset);
     scene.anims.create({
       key,
       frames: scene.anims.generateFrameNumbers(texture, {
