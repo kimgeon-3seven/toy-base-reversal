@@ -1,5 +1,4 @@
 import { describe, expect, it } from 'vitest';
-import { IMAGE_ASSETS } from '../assets/GameAssets';
 import { DirectionalAnimationCatalog } from './DirectionalAnimationCatalog';
 
 describe('DirectionalAnimationCatalog', () => {
@@ -15,8 +14,9 @@ describe('DirectionalAnimationCatalog', () => {
   });
 
   it('enables the pilot only for the attacking shield unit', () => {
-    expect(catalog.profileFor(IMAGE_ASSETS.attackerTank)?.id).toBe('shield');
-    expect(catalog.profileFor(IMAGE_ASSETS.attackerRanger)).toBeNull();
+    expect(catalog.profileForAttackUnit('tank')?.id).toBe('shield');
+    expect(catalog.profileForAttackUnit('swarm')).toBeNull();
+    expect(catalog.profileForAttackUnit('ranger')).toBeNull();
   });
 
   it('uses the first walk frame as the idle pose', () => {
