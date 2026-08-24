@@ -13,10 +13,10 @@ describe('DirectionalAnimationCatalog', () => {
     expect(catalog.directionForDegrees(-135)).toBe('northwest');
   });
 
-  it('enables the pilot only for the attacking shield unit', () => {
-    expect(catalog.profileForAttackUnit('tank')?.id).toBe('shield');
-    expect(catalog.profileForAttackUnit('swarm')).toBeNull();
-    expect(catalog.profileForAttackUnit('ranger')).toBeNull();
+  it('enables the shared profile only for shield units on either team', () => {
+    expect(catalog.profileForUnit('tank')?.id).toBe('shield');
+    expect(catalog.profileForUnit('swarm')).toBeNull();
+    expect(catalog.profileForUnit('ranger')).toBeNull();
   });
 
   it('uses the first walk frame as the idle pose', () => {

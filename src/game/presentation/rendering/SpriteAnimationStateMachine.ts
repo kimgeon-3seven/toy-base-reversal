@@ -2,6 +2,7 @@ export type SpriteAnimationAction = 'idle' | 'walk' | 'attack';
 
 export class SpriteAnimationStateMachine {
   private attackUntilMs = 0;
+  private moving = false;
   private walkUntilMs = 0;
 
   public beginAttack(nowMs: number, durationMs: number): void {
@@ -11,15 +12,23 @@ export class SpriteAnimationStateMachine {
     );
   }
 
-  public observeMovement(nowMs: number, graceDurationMs: number): void {
-    this.walkUntilMs = Math.max(
-      this.walkUntilMs,
-      nowMs + Math.max(0, graceDurationMs),
-    );
+  public setMoving(
+    moving: boolean,
+    nowMs: number,
+    stopGraceDurationMs: number,
+  ): void {
+    if (moving) {
+      this.moving = true;
+      this.walkUntilMs = 0;
+      return;
+    }
+    if (!this.moving) return;
+    this.moving = false;
+    this.walkUntilMs = nowMs + Math.max(0, stopGraceDurationMs);
   }
 
   public resolve(nowMs: number): SpriteAnimationAction {
     if (nowMs < this.attackUntilMs) return 'attack';
-    return nowMs < this.walkUntilMs ? 'walk' : 'idle';
+    return this.moving || nowMs < this.walkUntilMs ? 'walk' : 'idle';
   }
 }
