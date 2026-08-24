@@ -1,6 +1,11 @@
 import type Phaser from 'phaser';
 import type { CombatHitEffectiveness } from '../../domain/combat/CombatEvent';
 import type { FacingDirectionResolver } from './FacingDirectionResolver';
+import type {
+  DirectionalAnimationCatalog,
+  DirectionalAnimationProfile,
+} from './DirectionalAnimationCatalog';
+import { SpriteAnimationStateMachine } from './SpriteAnimationStateMachine';
 
 export type SpriteFacingMode = 'static' | 'eight-way' | 'free';
 
@@ -21,12 +26,14 @@ export interface BattlefieldSpriteState {
   readonly baseScale?: number;
   readonly tint?: number;
   readonly alpha?: number;
+  readonly animationProfile?: DirectionalAnimationProfile | null;
 }
 
 export class BattlefieldSpriteView {
   private readonly shadow: Phaser.GameObjects.Ellipse;
   private readonly toyBase: Phaser.GameObjects.Ellipse;
-  private readonly image: Phaser.GameObjects.Image;
+  private readonly image: Phaser.GameObjects.Sprite;
+  private readonly animationState = new SpriteAnimationStateMachine();
   private currentState: BattlefieldSpriteState;
   private worldFacingDegrees: number;
   private renderedRotationDegrees: number;
@@ -44,6 +51,7 @@ export class BattlefieldSpriteView {
   public constructor(
     private readonly scene: Phaser.Scene,
     private readonly facingResolver: FacingDirectionResolver,
+    private readonly animationCatalog: DirectionalAnimationCatalog,
     id: string,
     initialState: BattlefieldSpriteState,
   ) {
@@ -65,7 +73,7 @@ export class BattlefieldSpriteView {
       .setDepth(initialState.depth - 0.5)
       .setVisible(initialState.baseColor !== undefined);
     this.image = scene.add
-      .image(initialState.x, initialState.y, initialState.texture)
+      .sprite(initialState.x, initialState.y, initialState.texture)
       .setDepth(initialState.depth);
     this.sync(initialState);
   }
@@ -131,8 +139,32 @@ export class BattlefieldSpriteView {
       .setDepth(state.depth - 0.5)
       .setAlpha(alpha)
       .setVisible(state.baseColor !== undefined);
+    const animationProfile = state.animationProfile ?? null;
+    const action = this.animationState.resolve(now, isMoving);
+    if (animationProfile === null) {
+      this.image.anims.stop();
+      this.image.setTexture(state.texture);
+    } else {
+      const direction = this.animationCatalog.directionForDegrees(
+        this.worldFacingDegrees,
+      );
+      if (action === 'idle') {
+        this.image.anims.stop();
+        this.image.setTexture(
+          animationProfile.walkTexture,
+          this.animationCatalog.idleFrame(direction),
+        );
+      } else {
+        const animationKey = this.animationCatalog.animationKey(
+          animationProfile,
+          action,
+          direction,
+        );
+        this.image.play(animationKey, true);
+      }
+    }
+
     this.image
-      .setTexture(state.texture)
       .setPosition(
         state.x + this.recoilX * recoilRatio + hitShake,
         state.y + bob + this.recoilY * recoilRatio,
@@ -142,7 +174,10 @@ export class BattlefieldSpriteView {
         (state.displayHeight ?? state.displaySize) / hitStretch,
       )
       .setDepth(state.depth)
-      .setAngle(this.renderedRotationDegrees + disruptionWobble)
+      .setAngle(
+        (animationProfile === null ? this.renderedRotationDegrees : 0) +
+          disruptionWobble,
+      )
       .setAlpha(alpha)
       .setVisible(true);
 
@@ -170,6 +205,7 @@ export class BattlefieldSpriteView {
     if (direction !== null) this.worldFacingDegrees = direction;
 
     this.attackFacingUntilMs = this.scene.time.now + 220;
+    this.animationState.beginAttack(this.scene.time.now, 340);
     this.recoilUntilMs = this.scene.time.now + 120;
     this.recoilX = (-deltaX / length) * 4;
     this.recoilY = (-deltaY / length) * 4;

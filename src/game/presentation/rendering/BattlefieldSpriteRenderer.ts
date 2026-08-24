@@ -18,6 +18,7 @@ import {
   type BattlefieldSpriteState,
 } from './BattlefieldSpriteView';
 import { FacingDirectionResolver } from './FacingDirectionResolver';
+import { DirectionalAnimationCatalog } from './DirectionalAnimationCatalog';
 import { SpriteFacingProfile } from './SpriteFacingProfile';
 import {
   ObstacleVisualPolicy,
@@ -30,6 +31,7 @@ interface SpriteDescriptor extends BattlefieldSpriteState {
 
 export class BattlefieldSpriteRenderer {
   private readonly facingResolver = new FacingDirectionResolver();
+  private readonly animationCatalog = new DirectionalAnimationCatalog();
   private readonly facingProfile = new SpriteFacingProfile();
   private readonly obstacleVisualPolicy = new ObstacleVisualPolicy();
   private readonly structures = new Map<string, BattlefieldSpriteView>();
@@ -43,9 +45,11 @@ export class BattlefieldSpriteRenderer {
   private readonly obstacleDamageGraphics: Phaser.GameObjects.Graphics;
 
   public constructor(private readonly scene: Phaser.Scene) {
+    this.animationCatalog.register(scene);
     this.core = new BattlefieldSpriteView(
       scene,
       this.facingResolver,
+      this.animationCatalog,
       'core',
       this.coreState(0, 0, 1),
     );
@@ -152,6 +156,7 @@ export class BattlefieldSpriteRenderer {
         initialFacingDegrees: 0,
         facingMode: 'eight-way',
         enableMovementBob: true,
+        animationProfile: this.animationCatalog.profileFor(texture),
       };
     });
     this.sync(this.defenders, descriptors);
@@ -180,6 +185,7 @@ export class BattlefieldSpriteRenderer {
         initialFacingDegrees: 0,
         facingMode: 'eight-way',
         enableMovementBob: true,
+        animationProfile: this.animationCatalog.profileFor(texture),
       };
     });
     this.sync(this.attackers, descriptors);
@@ -214,6 +220,7 @@ export class BattlefieldSpriteRenderer {
       this.commander = new BattlefieldSpriteView(
         this.scene,
         this.facingResolver,
+        this.animationCatalog,
         'commander',
         state,
       );
@@ -262,6 +269,7 @@ export class BattlefieldSpriteRenderer {
           new BattlefieldSpriteView(
             this.scene,
             this.facingResolver,
+            this.animationCatalog,
             descriptor.id,
             descriptor,
           ),
