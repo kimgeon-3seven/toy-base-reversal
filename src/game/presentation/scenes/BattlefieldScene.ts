@@ -23,7 +23,6 @@ import {
 } from '../../config/AttackCombatConfig';
 import {
   createPrototypeSquadPlan,
-  SIMULTANEOUS_CAPACITY_PER_LANE,
 } from '../../config/AttackSquadConfig';
 import {
   createPrototypeDefenseCombatConfig,
@@ -39,9 +38,7 @@ import {
   isUnitAvailable,
   availableTowerArchetypes,
   availableUnitArchetypes,
-  towerCounterSummary,
   TOWER_NAMES,
-  unitCounterSummary,
   UNIT_NAMES,
 } from '../../config/ContentConfig';
 import {
@@ -101,18 +98,13 @@ import {
   type AttackLanePlacementModel,
 } from '../rendering/AttackLanePlacementRenderer';
 import { AttackEntryPointResolver } from '../input/AttackEntryPointResolver';
+import {
+  BattlefieldPhaseUiPolicy,
+  type BattlefieldPhase,
+  type BattlefieldPhaseUiLayout,
+} from '../ui/BattlefieldPhaseUiPolicy';
 
 const PATH_COLORS = [0x59c3c3, 0xff8c61, 0x8bd17c] as const;
-type DefenseScenePhase =
-  | 'tutorial'
-  | 'preparation'
-  | 'combat'
-  | 'result'
-  | 'role-reversal'
-  | 'attack-preparation'
-  | 'attack-combat'
-  | 'attack-result'
-  | 'campaign-complete';
 
 export class BattlefieldScene extends Phaser.Scene {
   private editor!: DefenseEditor;
@@ -131,6 +123,7 @@ export class BattlefieldScene extends Phaser.Scene {
   private pauseMenu: PauseMenu | null = null;
   private isPaused = false;
   private statusText!: Phaser.GameObjects.Text;
+  private statusHideTimer: Phaser.Time.TimerEvent | null = null;
   private roundFlowHeader!: RoundFlowHeader;
   private missionPanel!: MissionPanel;
   private resultOverlay!: RoundResultOverlay;
@@ -162,7 +155,7 @@ export class BattlefieldScene extends Phaser.Scene {
   private activeKind: StructureKind = 'tower';
   private activeTowerArchetype: TowerArchetype = 'popgun';
   private selectedStructureId: string | null = null;
-  private phase: DefenseScenePhase = 'tutorial';
+  private phase: BattlefieldPhase = 'tutorial';
   private preparationRemainingMs = PREPARATION_DURATION_MS;
   private defenseStructureCountAtStart = 0;
   private combat: DefenseCombat | null = null;
@@ -177,6 +170,7 @@ export class BattlefieldScene extends Phaser.Scene {
   private hoveredGridPosition: GridPosition | null = null;
   private readonly defenseRewardPresenter = new DefenseRewardPresenter();
   private readonly feedbackAdvisor = new BattleFeedbackAdvisor();
+  private readonly phaseUiPolicy = new BattlefieldPhaseUiPolicy();
   private commanderMoveKeys!: {
     up: Phaser.Input.Keyboard.Key;
     down: Phaser.Input.Keyboard.Key;
@@ -198,6 +192,7 @@ export class BattlefieldScene extends Phaser.Scene {
     this.audioControlPanel = null;
     this.pauseMenu = null;
     this.isPaused = false;
+    this.statusHideTimer = null;
     this.time.paused = false;
     this.tweens.resumeAll();
     this.roundSession = new RoundSession(NORMAL_MODE_ROUND_COUNT);
@@ -379,15 +374,16 @@ export class BattlefieldScene extends Phaser.Scene {
     this.roundFlowHeader = new RoundFlowHeader(this);
     this.missionPanel = new MissionPanel(this);
 
-    this.statusText = this.add.text(32, 779, '', {
+    this.statusText = this.add.text(500, 744, '', {
       color: GAME_COLORS.secondary,
       fontFamily: TOY_UI.fontFamily,
       fontSize: '13px',
       fontStyle: 'bold',
       backgroundColor: '#15131ecc',
       padding: { x: 8, y: 3 },
-      wordWrap: { width: 930 },
-    }).setDepth(61);
+      wordWrap: { width: 820 },
+      align: 'center',
+    }).setOrigin(0.5).setDepth(61);
 
     this.resultOverlay = new RoundResultOverlay(this);
     this.commanderAbilityPanel = new CommanderAbilityPanel(
@@ -423,6 +419,7 @@ export class BattlefieldScene extends Phaser.Scene {
       pause: () => this.pauseGame(),
       resume: () => this.resumeGame(),
       exitToOpening: () => this.exitToOpening(),
+      controls: () => this.phaseUiPolicy.resolve(this.phase).controls,
     });
     this.audioControlPanel = new AudioControlPanel(this, this.audioDirector);
     this.syncPauseAvailability();
@@ -1553,7 +1550,8 @@ export class BattlefieldScene extends Phaser.Scene {
     this.renderAttackLanePlacement();
     this.renderEnemies();
     this.renderAttackers();
-    this.missionPanel.render(this.missionPanelModel());
+    const layout = this.phaseUiPolicy.resolve(this.phase);
+    this.missionPanel.render(this.missionPanelModel(layout.showMissionSummary));
   }
 
   private renderPlacementPreview(): void {
@@ -2524,9 +2522,11 @@ export class BattlefieldScene extends Phaser.Scene {
   }
 
   private updatePhaseInterface(): void {
+    const layout = this.phaseUiPolicy.resolve(this.phase);
     this.syncCanvasAccessibilityState();
     this.syncPauseAvailability();
-    this.renderPreparationDecks();
+    this.renderPreparationDecks(layout);
+    this.statusText.setY(layout.statusY);
     this.roundFlowHeader.render({
       activeStep: this.flowStepForPhase(),
       roundLabel:
@@ -2536,13 +2536,13 @@ export class BattlefieldScene extends Phaser.Scene {
             ? '일반 완료'
             : this.roundLabel(),
     });
-    this.missionPanel.render(this.missionPanelModel());
-    this.renderCommanderAbilityPanel();
+    this.missionPanel.render(this.missionPanelModel(layout.showMissionSummary));
+    this.renderCommanderAbilityPanel(layout);
   }
 
-  private renderCommanderAbilityPanel(): void {
+  private renderCommanderAbilityPanel(layout: BattlefieldPhaseUiLayout): void {
     const combat = this.attackCombat;
-    const visible = this.phase === 'attack-combat' && combat !== null;
+    const visible = layout.showCommanderAbilities && combat !== null;
     const focusState =
       this.isFocusTargeting
         ? 'targeting'
@@ -2581,21 +2581,21 @@ export class BattlefieldScene extends Phaser.Scene {
     return 'break';
   }
 
-  private missionPanelModel(): MissionPanelModel {
+  private missionPanelModel(visible: boolean): MissionPanelModel {
     if (this.phase === 'tutorial') {
       return {
+        visible,
         phaseLabel: '첫 임무',
         title: '기지를 지켜라',
         objective: '준비된 방어선을 지킨 뒤 역할 반전을 경험하세요.',
         stats: ['목표 · 일반 5라운드', ...this.personalRecordSummary().split('\n')],
-        selection: '설계 → 방어 → 반전 → 공략',
-        tip: '[Enter] 게임 시작\n[Tab] 순위표',
       };
     }
 
     if (this.phase === 'role-reversal') {
       const reward = this.roundSession.currentDefenseResult?.sortieReward;
       return {
+        visible,
         phaseLabel: `${this.roundLabel()} · 역할 반전`,
         title: '이제 공격자다',
         objective: '방금 지킨 같은 기지를 직접 돌파하세요.',
@@ -2606,13 +2606,12 @@ export class BattlefieldScene extends Phaser.Scene {
                 `출격 포인트 ${reward.totalPoints}P`,
                 `기본 ${reward.basePoints} + 처치 ${reward.killBonus} + 코어 ${reward.coreHealthBonus}`,
               ],
-        selection: '일반 유닛 · 자동 전투\n지휘관 · 직접 조작',
-        tip: '잠시 후 자동 진행\n[Enter] 바로 진행',
       };
     }
 
     if (this.phase === 'campaign-complete') {
       return {
+        visible,
         phaseLabel: '일반 모드 완료',
         title: '장난감은 계속 싸운다',
         objective: '아이 없이 계속되는 챌린지 전쟁에 도전하세요.',
@@ -2621,14 +2620,13 @@ export class BattlefieldScene extends Phaser.Scene {
           `누적 ${this.formatTime(this.roundSession.totalAttackTimeMs)}`,
           this.latestRecordNotice,
         ],
-        selection: this.challengeRecordText(),
-        tip: '[Enter] 챌린지 시작\n[R] 처음부터',
       };
     }
 
     if (this.phase === 'preparation') {
       const preview = defenseWavePreviewForRound(this.roundSession.currentRound);
       return {
+        visible,
         phaseLabel: `${this.roundLabel()} · 설계`,
         title: '방어선을 준비하세요',
         objective: '세 진입로를 확인하고 코어까지 오는 적을 막으세요.',
@@ -2639,14 +2637,13 @@ export class BattlefieldScene extends Phaser.Scene {
           this.projectedSortieRewardText(),
           ...(this.roundSession.isChallengeMode ? [this.challengeRecordText()] : []),
         ],
-        selection: this.currentSelectionSummary(),
-        tip: '타워 선택 → 격자 클릭\n[Space] 방어 시작',
       };
     }
 
     if (this.phase === 'attack-preparation' && this.squadPlan !== null) {
       const reward = this.roundSession.currentDefenseResult?.sortieReward;
       return {
+        visible,
         phaseLabel: `${this.roundLabel()} · 공략 준비`,
         title: '부대를 편성하세요',
         objective: '타워 상성에 맞춰 세 진입로의 출격 순서를 정하세요.',
@@ -2658,8 +2655,6 @@ export class BattlefieldScene extends Phaser.Scene {
             ? []
             : [`보상 · 기본 ${reward.basePoints} + 처치 ${reward.killBonus} + 코어 ${reward.coreHealthBonus}`]),
         ],
-        selection: `${UNIT_NAMES[this.selectedAttackUnitKind]} · ${attackUnitCost(this.selectedAttackUnitKind)}P\n강함 · ${unitCounterSummary(this.selectedAttackUnitKind)}`,
-        tip: `유닛 선택 → 전장 진입로 클릭\n우클릭 마지막 제거 · 동시 ${SIMULTANEOUS_CAPACITY_PER_LANE}명\n[Space] 공격 시작`,
       };
     }
 
@@ -2667,14 +2662,8 @@ export class BattlefieldScene extends Phaser.Scene {
       (this.phase === 'attack-combat' || this.phase === 'attack-result') &&
       this.attackCombat !== null
     ) {
-      const activeDisruption = this.attackCombat.activeDisruptions[0];
-      const disruptStatus =
-        activeDisruption !== undefined
-          ? `작동 ${Math.ceil(activeDisruption.remainingMs / 1000)}초`
-          : this.attackCombat.disruptCooldownRemainingMs > 0
-            ? `대기 ${Math.ceil(this.attackCombat.disruptCooldownRemainingMs / 1000)}초`
-            : '준비';
       return {
+        visible,
         phaseLabel: `${this.roundLabel()} · 공략`,
         title: this.phase === 'attack-combat' ? '적 코어를 파괴하세요' : '공격 종료',
         objective: '지휘관을 지키며 핵심 타워부터 제거하세요.',
@@ -2684,14 +2673,13 @@ export class BattlefieldScene extends Phaser.Scene {
           `부대 ${this.attackCombat.units.length} (+${this.attackCombat.remainingSpawnCount})`,
           `남은 시간 ${Math.ceil(this.attackCombat.remainingTimeMs / 1000)}초`,
         ],
-        selection: `집중 공격 · ${this.attackCombat.canIssueFocusFire ? '준비' : '재사용 대기'}\n교란 · ${disruptStatus}`,
-        tip: '[WASD] 이동\n[Q] 집중 공격 · [E] 교란',
         warning: this.attackCombat.commander.health / this.attackCombat.commander.maxHealth < 0.35,
       };
     }
 
     if (this.combat !== null) {
       return {
+        visible,
         phaseLabel: `${this.roundLabel()} · 방어`,
         title: this.phase === 'combat' ? '코어를 지켜보세요' : '방어 종료',
         objective: '타워는 자동 공격합니다. 누수는 비용만큼 코어에 피해를 줍니다.',
@@ -2701,44 +2689,17 @@ export class BattlefieldScene extends Phaser.Scene {
           `처치 ${this.combat.killCount} · 누수 ${this.combat.leakCount}`,
           this.projectedSortieRewardText(),
         ],
-        selection: `남은 시설 ${this.editor.battlefield.structures.length}\n처치와 코어 체력 → 출격 포인트`,
-        tip: '어느 진입로가 새는지 확인하세요.\n[Esc] 일시정지',
         warning: this.combat.coreHealth / this.combat.config.coreMaxHealth < 0.35,
       };
     }
 
     return {
+      visible,
       phaseLabel: '작전 대기',
       title: '다음 단계를 준비합니다',
       objective: '잠시만 기다려주세요.',
       stats: [],
-      tip: '[Esc] 일시정지',
     };
-  }
-
-  private currentSelectionSummary(): string {
-    const selected =
-      this.selectedStructureId === null
-        ? null
-        : (this.editor.battlefield.structures.find(
-            (structure) => structure.id === this.selectedStructureId,
-          ) ?? null);
-    if (selected !== null) {
-      const name =
-        selected.kind === 'tower' && selected.towerArchetype !== null
-          ? `${TOWER_NAMES[selected.towerArchetype]} Lv.${selected.upgradeLevel}`
-          : '블록 벽';
-      return `${name}\n체력 ${selected.health}/${selected.maxHealth}\n${selected.kind === 'tower' ? `강화 ${this.editor.upgradeCost(selected) === null ? '최대' : `${this.editor.upgradeCost(selected)} 부품`}` : '길목을 지연시킴'}`;
-    }
-    const name =
-      this.activeKind === 'tower'
-        ? TOWER_NAMES[this.activeTowerArchetype]
-        : '블록 벽';
-    const counter =
-      this.activeKind === 'tower'
-        ? `강함 · ${towerCounterSummary(this.activeTowerArchetype)}`
-        : '공격 없음 · 이동 지연';
-    return `${name}\n${counter}\n보유 ${this.editor.constructionFunds} 부품 · 강화 최대 Lv.${MAX_TOWER_LEVEL}`;
   }
 
   private projectedSortieRewardText(): string {
@@ -2764,7 +2725,7 @@ export class BattlefieldScene extends Phaser.Scene {
   }
 
   private syncCanvasAccessibilityState(): void {
-    const phaseLabels: Readonly<Record<DefenseScenePhase, string>> = {
+    const phaseLabels: Readonly<Record<BattlefieldPhase, string>> = {
       tutorial: '게임 시작 안내',
       preparation: '방어 준비',
       combat: '방어 전투',
@@ -2840,8 +2801,8 @@ export class BattlefieldScene extends Phaser.Scene {
     }).format(new Date(isoDate));
   }
 
-  private renderPreparationDecks(): void {
-    const isDefensePreparation = this.phase === 'preparation';
+  private renderPreparationDecks(layout: BattlefieldPhaseUiLayout): void {
+    const isDefensePreparation = layout.showDefenseDeck;
     this.defenseBuildDeck.setVisible(isDefensePreparation);
     if (isDefensePreparation) {
       const selected =
@@ -2868,8 +2829,7 @@ export class BattlefieldScene extends Phaser.Scene {
       });
     }
 
-    const isAttackPreparation =
-      this.phase === 'attack-preparation' && this.squadPlan !== null;
+    const isAttackPreparation = layout.showAttackDeck && this.squadPlan !== null;
     this.attackFormationDeck.setVisible(isAttackPreparation);
     if (isAttackPreparation && this.squadPlan !== null) {
       this.attackFormationDeck.render({
@@ -2885,8 +2845,13 @@ export class BattlefieldScene extends Phaser.Scene {
   }
 
   private setStatus(message: string, isWarning = false): void {
+    this.statusHideTimer?.remove(false);
     this.statusText.setColor(isWarning ? '#ff7b8f' : GAME_COLORS.secondary);
-    this.statusText.setText(message);
+    this.statusText.setText(message).setVisible(true);
+    this.statusHideTimer = this.time.delayedCall(isWarning ? 5_000 : 3_600, () => {
+      this.statusText.setVisible(false);
+      this.statusHideTimer = null;
+    });
     if (isWarning) this.audioDirector.playUi('error');
   }
 }

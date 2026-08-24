@@ -1,7 +1,6 @@
 import type Phaser from 'phaser';
 import type { TowerArchetype } from '../../domain/combat/CombatArchetype';
 import type { StructureKind } from '../../domain/structures/DefenseStructure';
-import { GAME_COLORS } from '../../config/GameConfig';
 import { TOWER_CONSTRUCTION_COSTS } from '../../config/ConstructionEconomyConfig';
 import { TOWER_NAMES } from '../../config/ContentConfig';
 import { TextButton } from './TextButton';
@@ -49,20 +48,14 @@ export class DefenseBuildDeck {
     actions: DefenseBuildDeckActions,
   ) {
     const ui = new ToyUiFactory(scene);
-    const panel = ui.createPaperPanel(960, 82, {
+    const panel = ui.createPaperPanel(960, 72, {
       accent: TOY_UI.coral,
       tape: false,
     });
-    const title = scene.add.text(16, 8, '설계 도구', {
-      color: TOY_UI.coralDark === 0x9d332e ? '#9d332e' : GAME_COLORS.primary,
-      fontFamily: TOY_UI.fontFamily,
-      fontSize: '13px',
-      fontStyle: 'bold',
-    });
-    this.summary = scene.add.text(122, 8, '', {
+    this.summary = scene.add.text(16, 7, '', {
       color: TOY_UI.mutedInk,
       fontFamily: TOY_UI.fontFamily,
-      fontSize: '13px',
+      fontSize: '12px',
       fontStyle: 'bold',
     });
 
@@ -72,9 +65,9 @@ export class DefenseBuildDeck {
       const button = new TextButton(
         scene,
         63 + index * 113,
-        49,
+        43,
         106,
-        50,
+        42,
         '',
         () => actions.selectTower(tower),
       );
@@ -86,63 +79,63 @@ export class DefenseBuildDeck {
     this.obstacleButton = new TextButton(
       scene,
       402,
-      49,
+      43,
       106,
-      50,
+      42,
       '▦  블록 벽\n[4]',
       actions.selectObstacle,
     );
     this.upgradeButton = new TextButton(
       scene,
       492,
-      49,
+      43,
       60,
-      50,
+      42,
       '강화\n[U]',
       actions.upgrade,
     );
     this.undoButton = new TextButton(
       scene,
       558,
-      49,
+      43,
       54,
-      50,
+      42,
       '취소\n↶',
       actions.undo,
     );
     this.redoButton = new TextButton(
       scene,
       616,
-      49,
+      43,
       54,
-      50,
+      42,
       '다시\n↷',
       actions.redo,
     );
     const saveButton = new TextButton(
       scene,
       677,
-      49,
+      43,
       58,
-      50,
+      42,
       '저장\n[S]',
       actions.save,
     );
     const resetButton = new TextButton(
       scene,
       740,
-      49,
+      43,
       58,
-      50,
+      42,
       '저장점\n복구',
       actions.reset,
     );
     const startButton = new TextButton(
       scene,
       875,
-      49,
+      43,
       160,
-      50,
+      42,
       '▶ 방어 시작\n[Space]',
       actions.start,
       {
@@ -162,9 +155,8 @@ export class DefenseBuildDeck {
       resetButton,
       startButton,
     );
-    this.container = scene.add.container(32, 693, [
+    this.container = scene.add.container(32, 706, [
       ...panel,
-      title,
       ...buttons.map((button) => button.gameObject),
       this.summary,
     ]);

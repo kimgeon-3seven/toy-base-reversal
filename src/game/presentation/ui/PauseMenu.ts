@@ -8,6 +8,7 @@ export interface PauseMenuActions {
   readonly pause: () => void;
   readonly resume: () => void;
   readonly exitToOpening: () => void;
+  readonly controls: () => string;
 }
 
 export class PauseMenu {
@@ -16,6 +17,7 @@ export class PauseMenu {
   private readonly title: Phaser.GameObjects.Text;
   private readonly body: Phaser.GameObjects.Text;
   private readonly resumeButton: TextButton;
+  private readonly controlsButton: TextButton;
   private readonly exitButton: TextButton;
   private readonly confirmExitButton: TextButton;
   private readonly cancelButton: TextButton;
@@ -47,15 +49,15 @@ export class PauseMenu {
     );
     const paper = scene.add
       .image(0, 0, IMAGE_ASSETS.paperTexture)
-      .setDisplaySize(560, 390)
+      .setDisplaySize(560, 420)
       .setAlpha(0.99);
     const panel = scene.add
-      .rectangle(0, 0, 560, 390, TOY_UI.paper, 0.1)
+      .rectangle(0, 0, 560, 420, TOY_UI.paper, 0.1)
       .setStrokeStyle(4, TOY_UI.teal, 0.95);
-    const tapeLeft = scene.add.rectangle(-195, -196, 80, 20, 0xe4cc8f, 0.75).setAngle(-5);
-    const tapeRight = scene.add.rectangle(195, -196, 80, 20, 0xe4cc8f, 0.75).setAngle(5);
+    const tapeLeft = scene.add.rectangle(-195, -210, 80, 20, 0xe4cc8f, 0.75).setAngle(-5);
+    const tapeRight = scene.add.rectangle(195, -210, 80, 20, 0xe4cc8f, 0.75).setAngle(5);
     this.title = scene.add
-      .text(0, -132, '일시정지', {
+      .text(0, -148, '일시정지', {
         color: '#0b615a',
         fontFamily: TOY_UI.fontFamily,
         fontSize: '34px',
@@ -63,21 +65,21 @@ export class PauseMenu {
       })
       .setOrigin(0.5);
     this.body = scene.add
-      .text(0, -70, '전투와 모든 타이머가 멈췄습니다.', {
+      .text(0, -88, '전투와 모든 타이머가 멈췄습니다.', {
         align: 'center',
         color: TOY_UI.ink,
         fontFamily: TOY_UI.fontFamily,
-        fontSize: '19px',
-        lineSpacing: 7,
+        fontSize: '17px',
+        lineSpacing: 6,
         wordWrap: { width: 450 },
       })
       .setOrigin(0.5);
     this.resumeButton = new TextButton(
       scene,
       0,
-      45,
+      12,
       260,
-      48,
+      44,
       '계속하기',
       actions.resume,
       {
@@ -87,12 +89,21 @@ export class PauseMenu {
         text: '#fffdf3',
       },
     );
+    this.controlsButton = new TextButton(
+      scene,
+      0,
+      68,
+      260,
+      44,
+      '조작법',
+      () => this.showControls(actions.controls()),
+    );
     this.exitButton = new TextButton(
       scene,
       0,
-      112,
+      124,
       260,
-      48,
+      44,
       '게임 나가기',
       () => this.showExitConfirmation(),
       {
@@ -105,9 +116,9 @@ export class PauseMenu {
     this.confirmExitButton = new TextButton(
       scene,
       -100,
-      85,
+      105,
       180,
-      48,
+      44,
       '나가기 확인',
       actions.exitToOpening,
       {
@@ -120,9 +131,9 @@ export class PauseMenu {
     this.cancelButton = new TextButton(
       scene,
       100,
-      85,
+      105,
       160,
-      48,
+      44,
       '취소',
       () => this.showPauseOptions(),
     );
@@ -136,6 +147,7 @@ export class PauseMenu {
         this.title,
         this.body,
         this.resumeButton.gameObject,
+        this.controlsButton.gameObject,
         this.exitButton.gameObject,
         this.confirmExitButton.gameObject,
         this.cancelButton.gameObject,
@@ -167,7 +179,10 @@ export class PauseMenu {
   private showPauseOptions(): void {
     this.title.setText('일시정지');
     this.body.setText('전투와 모든 타이머가 멈췄습니다.');
+    this.cancelButton.setLabel('취소');
+    this.cancelButton.gameObject.setPosition(100, 105);
     this.resumeButton.setVisible(true);
+    this.controlsButton.setVisible(true);
     this.exitButton.setVisible(true);
     this.confirmExitButton.setVisible(false);
     this.cancelButton.setVisible(false);
@@ -179,8 +194,21 @@ export class PauseMenu {
       '현재 라운드와 도전 진행은 사라집니다.\n개인 기록, 닉네임과 소리 설정은 유지됩니다.',
     );
     this.resumeButton.setVisible(false);
+    this.controlsButton.setVisible(false);
     this.exitButton.setVisible(false);
     this.confirmExitButton.setVisible(true);
+    this.cancelButton.setVisible(true);
+  }
+
+  private showControls(controls: string): void {
+    this.title.setText('현재 단계 조작법');
+    this.body.setText(controls);
+    this.resumeButton.setVisible(false);
+    this.controlsButton.setVisible(false);
+    this.exitButton.setVisible(false);
+    this.confirmExitButton.setVisible(false);
+    this.cancelButton.setLabel('뒤로');
+    this.cancelButton.gameObject.setPosition(0, 120);
     this.cancelButton.setVisible(true);
   }
 }

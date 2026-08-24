@@ -1,7 +1,6 @@
 import type Phaser from 'phaser';
 import type { AttackUnitKind } from '../../domain/attack/SquadPlan';
 import { attackUnitCost } from '../../domain/attack/SquadPlan';
-import { GAME_COLORS } from '../../config/GameConfig';
 import { UNIT_NAMES } from '../../config/ContentConfig';
 import { TextButton } from './TextButton';
 import { TOY_UI, ToyUiFactory } from './ToyUiTheme';
@@ -44,29 +43,23 @@ export class AttackFormationDeck {
     actions: AttackFormationDeckActions,
   ) {
     const ui = new ToyUiFactory(scene);
-    const panel = ui.createPaperPanel(940, 180, {
+    const panel = ui.createPaperPanel(940, 150, {
       accent: TOY_UI.teal,
-      tape: true,
+      tape: false,
     });
-    const title = scene.add.text(20, 14, '공격 편성판', {
-      color: TOY_UI.tealDark === 0x0b615a ? '#0b615a' : GAME_COLORS.primary,
+    const title = scene.add.text(18, 10, '공격 편성', {
+      color: '#0b615a',
       fontFamily: TOY_UI.fontFamily,
-      fontSize: '22px',
-      fontStyle: 'bold',
-    });
-    const subtitle = scene.add.text(164, 19, '내 방어선의 약점을 노려 출격 순서를 정하세요', {
-      color: TOY_UI.mutedInk,
-      fontFamily: TOY_UI.fontFamily,
-      fontSize: '13px',
+      fontSize: '17px',
       fontStyle: 'bold',
     });
     this.budgetText = scene.add
-      .text(920, 17, '', {
+      .text(920, 9, '', {
         align: 'right',
         backgroundColor: '#dce9d2',
         color: '#0b615a',
         fontFamily: TOY_UI.fontFamily,
-        fontSize: '17px',
+        fontSize: '14px',
         fontStyle: 'bold',
         padding: { x: 9, y: 4 },
       })
@@ -78,9 +71,9 @@ export class AttackFormationDeck {
       const button = new TextButton(
         scene,
         96 + index * 164,
-        54,
+        43,
         154,
-        38,
+        32,
         '',
         () => actions.selectUnit(unit),
       );
@@ -92,27 +85,27 @@ export class AttackFormationDeck {
     const recommendButton = new TextButton(
       scene,
       583,
-      54,
+      43,
       130,
-      38,
+      32,
       '추천 편성 [P]',
       actions.recommend,
     );
     const clearButton = new TextButton(
       scene,
       707,
-      54,
+      43,
       100,
-      38,
+      32,
       '전체 비우기',
       actions.clear,
     );
     this.startButton = new TextButton(
       scene,
       849,
-      54,
+      43,
       160,
-      38,
+      32,
       '▶ 공격 시작 [Space]',
       actions.start,
       {
@@ -128,18 +121,18 @@ export class AttackFormationDeck {
     const addButtons: TextButton[] = [];
     const removeButtons: TextButton[] = [];
     for (let laneIndex = 0; laneIndex < 3; laneIndex += 1) {
-      const y = 88 + laneIndex * 36;
+      const y = 76 + laneIndex * 25;
       const queue = scene.add.text(126, y - 9, '', {
         color: TOY_UI.ink,
         fontFamily: TOY_UI.fontFamily,
-        fontSize: '14px',
+        fontSize: '12px',
       });
       const add = new TextButton(
         scene,
         756,
         y,
         110,
-        28,
+        23,
         '+ 선택 유닛',
         () => actions.addUnit(laneIndex),
       );
@@ -148,7 +141,7 @@ export class AttackFormationDeck {
         874,
         y,
         110,
-        28,
+        23,
         '마지막 제거',
         () => actions.removeUnit(laneIndex),
       );
@@ -162,17 +155,16 @@ export class AttackFormationDeck {
     this.removeButtons = removeButtons;
 
     const laneLabels = Array.from({ length: 3 }, (_, laneIndex) =>
-      scene.add.text(20, 79 + laneIndex * 36, `${laneIndex + 1}번 진입로`, {
+      scene.add.text(20, 67 + laneIndex * 25, `${laneIndex + 1}번 진입로`, {
         color: '#9d332e',
         fontFamily: TOY_UI.fontFamily,
-        fontSize: '15px',
+        fontSize: '13px',
         fontStyle: 'bold',
       }),
     );
-    this.container = scene.add.container(42, 606, [
+    this.container = scene.add.container(42, 636, [
       ...panel,
       title,
-      subtitle,
       this.budgetText,
       ...laneLabels,
       ...laneTexts,

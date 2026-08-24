@@ -11,7 +11,6 @@ export interface RoundFlowHeaderModel {
 interface StepView {
   readonly key: RoundFlowStep;
   readonly background: Phaser.GameObjects.Rectangle;
-  readonly number: Phaser.GameObjects.Text;
   readonly label: Phaser.GameObjects.Text;
 }
 
@@ -30,13 +29,13 @@ export class RoundFlowHeader {
   public constructor(scene: Phaser.Scene) {
     const ui = new ToyUiFactory(scene);
     const children: Phaser.GameObjects.GameObject[] = [
-      ...ui.createPaperPanel(500, 60, { accent: TOY_UI.teal, tape: false }),
+      ...ui.createPaperPanel(432, 52, { accent: TOY_UI.teal, tape: false }),
     ];
     this.roundText = scene.add
-      .text(18, 30, '', {
+      .text(14, 26, '', {
         color: TOY_UI.ink,
         fontFamily: TOY_UI.fontFamily,
-        fontSize: '14px',
+        fontSize: '13px',
         fontStyle: 'bold',
       })
       .setOrigin(0, 0.5);
@@ -44,29 +43,21 @@ export class RoundFlowHeader {
 
     const stepViews: StepView[] = [];
     STEP_ORDER.forEach((key, index) => {
-      const x = 124 + index * 92;
-      const background = ui.createChip(x, 30, 82, 38, TOY_UI.paperDark);
-      const number = scene.add
-        .text(x - 26, 30, String(index + 1), {
-          color: TOY_UI.mutedInk,
-          fontFamily: TOY_UI.fontFamily,
-          fontSize: '12px',
-          fontStyle: 'bold',
-        })
-        .setOrigin(0.5);
+      const x = 126 + index * 75;
+      const background = ui.createChip(x, 26, 68, 32, TOY_UI.paperDark);
       const label = scene.add
-        .text(x + 8, 30, STEP_LABELS[key], {
+        .text(x, 26, STEP_LABELS[key], {
           color: TOY_UI.mutedInk,
           fontFamily: TOY_UI.fontFamily,
-          fontSize: '14px',
+          fontSize: '13px',
           fontStyle: 'bold',
         })
         .setOrigin(0.5);
-      stepViews.push({ key, background, number, label });
-      children.push(background, number, label);
+      stepViews.push({ key, background, label });
+      children.push(background, label);
     });
     this.steps = stepViews;
-    scene.add.container(286, 15, children).setDepth(70);
+    scene.add.container(284, 18, children).setDepth(70);
   }
 
   public render(model: RoundFlowHeaderModel): void {
@@ -88,7 +79,6 @@ export class RoundFlowHeader {
         .setStrokeStyle(isActive ? 3 : 1, isActive ? TOY_UI.gold : 0xffffff, 0.72)
         .setScale(isActive ? 1.04 : 1);
       const textColor = isActive ? '#fffdf3' : isComplete ? '#23463a' : TOY_UI.mutedInk;
-      step.number.setColor(textColor);
       step.label.setColor(textColor);
     }
   }
