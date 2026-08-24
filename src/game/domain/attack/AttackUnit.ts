@@ -14,6 +14,7 @@ export class AttackUnit {
   private currentPosition: GridPosition;
   private nextPosition: GridPosition | null = null;
   private movementProgress = 0;
+  private movementSpeedMultiplier = 1;
   private attackCooldownRemainingMs = 0;
 
   public constructor(
@@ -75,19 +76,41 @@ export class AttackUnit {
   }
 
   public advanceToward(target: GridPosition, deltaMs: number, speedMultiplier = 1): void {
-    this.nextPosition = target;
-    this.movementProgress +=
-      (this.stats.movementSpeed * speedMultiplier * deltaMs) / 1000;
-    if (this.movementProgress >= 1) {
-      this.currentPosition = target;
-      this.movementProgress -= 1;
-      this.nextPosition = null;
+    if (this.nextPosition === null) {
+      this.nextPosition = target;
+      this.movementSpeedMultiplier = speedMultiplier;
     }
+    this.advanceMovement(deltaMs);
+  }
+
+  public continueActiveMovement(deltaMs: number): boolean {
+    if (this.nextPosition === null) {
+      return false;
+    }
+
+    this.advanceMovement(deltaMs);
+    return true;
   }
 
   public cancelMovement(): void {
     this.nextPosition = null;
     this.movementProgress = 0;
+    this.movementSpeedMultiplier = 1;
+  }
+
+  private advanceMovement(deltaMs: number): void {
+    if (this.nextPosition === null) {
+      return;
+    }
+
+    this.movementProgress +=
+      (this.stats.movementSpeed * this.movementSpeedMultiplier * deltaMs) / 1000;
+    if (this.movementProgress >= 1) {
+      this.currentPosition = this.nextPosition;
+      this.movementProgress -= 1;
+      this.nextPosition = null;
+      this.movementSpeedMultiplier = 1;
+    }
   }
 
   private interpolate(start: number, end: number | undefined): number {

@@ -458,6 +458,9 @@ export class AttackCombat {
   private updateUnits(deltaMs: number): void {
     for (const unit of this.units) {
       unit.updateCooldown(deltaMs);
+      if (unit.continueActiveMovement(deltaMs)) {
+        continue;
+      }
       if (this.updateFocusedUnit(unit, deltaMs)) {
         continue;
       }
