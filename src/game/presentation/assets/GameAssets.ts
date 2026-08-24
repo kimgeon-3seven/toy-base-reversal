@@ -52,7 +52,7 @@ export function preloadGameAssets(loader: Phaser.Loader.LoaderPlugin): void {
   loader.image(IMAGE_ASSETS.towerPopgun, assetUrl(`${sprites}/tower-popgun-v2.png`));
   loader.image(IMAGE_ASSETS.towerMortar, assetUrl(`${sprites}/tower-mortar-v2.png`));
   loader.image(IMAGE_ASSETS.towerPiercer, assetUrl(`${sprites}/tower-piercer-v2.png`));
-  loader.image(IMAGE_ASSETS.obstacle, assetUrl(`${sprites}/obstacle.png`));
+  loader.image(IMAGE_ASSETS.obstacle, assetUrl(`${sprites}/obstacle-v2.png`));
   loader.image(IMAGE_ASSETS.defenderTank, assetUrl(`${sprites}/unit-shield-v2.png`));
   loader.image(IMAGE_ASSETS.defenderSwarm, assetUrl(`${sprites}/unit-windup-v2.png`));
   loader.image(IMAGE_ASSETS.defenderRanger, assetUrl(`${sprites}/unit-ranger-v2.png`));

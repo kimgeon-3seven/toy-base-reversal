@@ -16,5 +16,6 @@ describe('SpriteFacingProfile', () => {
     expect(profile.naturalFacingDegrees(IMAGE_ASSETS.commander)).toBe(0);
     expect(profile.naturalFacingDegrees(IMAGE_ASSETS.towerMortar)).toBe(0);
     expect(profile.naturalFacingDegrees(IMAGE_ASSETS.towerPiercer)).toBe(0);
+    expect(profile.naturalFacingDegrees(IMAGE_ASSETS.obstacle)).toBe(0);
   });
 });

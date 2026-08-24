@@ -19,6 +19,10 @@ import {
 } from './BattlefieldSpriteView';
 import { FacingDirectionResolver } from './FacingDirectionResolver';
 import { SpriteFacingProfile } from './SpriteFacingProfile';
+import {
+  ObstacleVisualPolicy,
+  type ObstacleVisualState,
+} from './ObstacleVisualPolicy';
 
 interface SpriteDescriptor extends BattlefieldSpriteState {
   readonly id: string;
@@ -27,6 +31,7 @@ interface SpriteDescriptor extends BattlefieldSpriteState {
 export class BattlefieldSpriteRenderer {
   private readonly facingResolver = new FacingDirectionResolver();
   private readonly facingProfile = new SpriteFacingProfile();
+  private readonly obstacleVisualPolicy = new ObstacleVisualPolicy();
   private readonly structures = new Map<string, BattlefieldSpriteView>();
   private readonly defenders = new Map<string, BattlefieldSpriteView>();
   private readonly attackers = new Map<string, BattlefieldSpriteView>();
@@ -35,6 +40,7 @@ export class BattlefieldSpriteRenderer {
   private readonly coreHud: Phaser.GameObjects.Graphics;
   private readonly coreLabel: Phaser.GameObjects.Text;
   private readonly commanderLabel: Phaser.GameObjects.Text;
+  private readonly obstacleDamageGraphics: Phaser.GameObjects.Graphics;
 
   public constructor(private readonly scene: Phaser.Scene) {
     this.core = new BattlefieldSpriteView(
@@ -67,6 +73,7 @@ export class BattlefieldSpriteRenderer {
       .setOrigin(0.5)
       .setDepth(29)
       .setVisible(false);
+    this.obstacleDamageGraphics = scene.add.graphics().setDepth(14);
   }
 
   public renderCore(column: number, row: number, healthRatio: number): void {
@@ -91,23 +98,31 @@ export class BattlefieldSpriteRenderer {
     const descriptors = structures.map((structure): SpriteDescriptor => {
       const point = this.toWorld(structure.position.column, structure.position.row);
       const texture = this.structureTexture(structure);
+      const obstacleVisual =
+        structure.kind === 'obstacle'
+          ? this.obstacleVisualPolicy.resolve(structure, structures)
+          : null;
       return {
         id: structure.id,
         texture,
         x: point.x,
         y: point.y,
-        displaySize: structure.kind === 'obstacle' ? 53 : 66,
+        displaySize: structure.kind === 'obstacle' ? 56 : 66,
+        displayWidth: structure.kind === 'obstacle' ? 66 : undefined,
+        displayHeight: structure.kind === 'obstacle' ? 44 : undefined,
         depth: 12,
         baseColor: structure.kind === 'obstacle' ? 0xb69c7b : 0xe95e4f,
         baseScale: structure.kind === 'obstacle' ? 0.72 : 0.66,
         naturalFacingDegrees: this.facingProfile.naturalFacingDegrees(texture),
-        initialFacingDegrees: 0,
+        initialFacingDegrees: obstacleVisual?.rotationDegrees ?? 0,
         facingMode: structure.kind === 'tower' ? 'free' : 'static',
         enableMovementBob: false,
         isDisrupted: disabledTowerIds.has(structure.id),
+        tint: obstacleVisual?.tint,
       };
     });
     this.sync(this.structures, descriptors);
+    this.renderObstacleDamage(structures);
   }
 
   public renderDefenders(enemies: readonly DefenseEnemy[]): void {
@@ -329,6 +344,56 @@ export class BattlefieldSpriteRenderer {
     if (structure.towerArchetype === 'mortar') return IMAGE_ASSETS.towerMortar;
     if (structure.towerArchetype === 'piercer') return IMAGE_ASSETS.towerPiercer;
     return IMAGE_ASSETS.towerPopgun;
+  }
+
+  private renderObstacleDamage(structures: readonly DefenseStructure[]): void {
+    this.obstacleDamageGraphics.clear();
+    for (const structure of structures) {
+      if (structure.kind !== 'obstacle') continue;
+      const visual = this.obstacleVisualPolicy.resolve(structure, structures);
+      if (visual.damageState === 'intact') continue;
+      const center = this.toWorld(
+        structure.position.column,
+        structure.position.row,
+      );
+      this.drawCrack(center, visual, [
+        [-13, -9],
+        [-4, -2],
+        [-9, 8],
+        [2, 2],
+        [10, 9],
+      ]);
+      if (visual.damageState === 'critical') {
+        this.drawCrack(center, visual, [
+          [9, -11],
+          [3, -4],
+          [12, 1],
+          [5, 10],
+        ]);
+      }
+    }
+  }
+
+  private drawCrack(
+    center: Phaser.Math.Vector2,
+    visual: ObstacleVisualState,
+    points: readonly (readonly [number, number])[],
+  ): void {
+    const first = points[0];
+    if (first === undefined) return;
+    const rotate = ([x, y]: readonly [number, number]) =>
+      visual.rotationDegrees === 90
+        ? { x: center.x - y, y: center.y + x }
+        : { x: center.x + x, y: center.y + y };
+    const start = rotate(first);
+    this.obstacleDamageGraphics.lineStyle(3, 0x54271f, 0.9);
+    this.obstacleDamageGraphics.beginPath();
+    this.obstacleDamageGraphics.moveTo(start.x, start.y);
+    for (const point of points.slice(1)) {
+      const next = rotate(point);
+      this.obstacleDamageGraphics.lineTo(next.x, next.y);
+    }
+    this.obstacleDamageGraphics.strokePath();
   }
 
   private toWorld(column: number, row: number): Phaser.Math.Vector2 {

@@ -15,6 +15,7 @@ export class SpriteFacingProfile {
       texture === IMAGE_ASSETS.defenderSwarm ||
       texture === IMAGE_ASSETS.defenderRanger ||
       texture === IMAGE_ASSETS.commander ||
+      texture === IMAGE_ASSETS.obstacle ||
       texture === IMAGE_ASSETS.towerPopgun ||
       texture === IMAGE_ASSETS.towerMortar ||
       texture === IMAGE_ASSETS.towerPiercer

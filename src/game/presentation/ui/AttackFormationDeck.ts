@@ -169,7 +169,7 @@ export class AttackFormationDeck {
         fontStyle: 'bold',
       }),
     );
-    this.container = scene.add.container(42, 520, [
+    this.container = scene.add.container(42, 606, [
       ...panel,
       title,
       subtitle,

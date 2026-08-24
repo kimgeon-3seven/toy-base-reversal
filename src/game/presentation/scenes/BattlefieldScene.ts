@@ -24,7 +24,6 @@ import {
 import {
   createPrototypeSquadPlan,
   SIMULTANEOUS_CAPACITY_PER_LANE,
-  SQUAD_SPAWN_INTERVAL_MS,
 } from '../../config/AttackSquadConfig';
 import {
   createPrototypeDefenseCombatConfig,
@@ -97,6 +96,11 @@ import {
   type PlacementPreviewModel,
   type SelectedTowerRangeModel,
 } from '../rendering/PlacementPreviewRenderer';
+import {
+  AttackLanePlacementRenderer,
+  type AttackLanePlacementModel,
+} from '../rendering/AttackLanePlacementRenderer';
+import { AttackEntryPointResolver } from '../input/AttackEntryPointResolver';
 
 const PATH_COLORS = [0x59c3c3, 0xff8c61, 0x8bd17c] as const;
 type DefenseScenePhase =
@@ -118,6 +122,8 @@ export class BattlefieldScene extends Phaser.Scene {
   private enemyGraphics!: Phaser.GameObjects.Graphics;
   private attackerGraphics!: Phaser.GameObjects.Graphics;
   private placementPreviewRenderer!: PlacementPreviewRenderer;
+  private attackLanePlacementRenderer!: AttackLanePlacementRenderer;
+  private attackEntryPointResolver!: AttackEntryPointResolver;
   private spriteRenderer!: BattlefieldSpriteRenderer;
   private effects!: BattlefieldEffects;
   private audioDirector!: BattlefieldAudioDirector;
@@ -217,6 +223,9 @@ export class BattlefieldScene extends Phaser.Scene {
       createPrototypeConstructionEconomy(),
       createPrototypeTowerUpgradePolicy(),
     );
+    this.attackEntryPointResolver = new AttackEntryPointResolver(
+      battlefield.map.entryPoints,
+    );
 
     this.seedInitialDesign();
     this.editor.saveBlueprint();
@@ -245,6 +254,7 @@ export class BattlefieldScene extends Phaser.Scene {
     this.enemyGraphics = this.add.graphics();
     this.attackerGraphics = this.add.graphics();
     this.placementPreviewRenderer = new PlacementPreviewRenderer(this);
+    this.attackLanePlacementRenderer = new AttackLanePlacementRenderer(this);
     this.pathGraphics.setDepth(4);
     this.boardGraphics.setDepth(3);
     this.structureGraphics.setDepth(30);
@@ -1233,7 +1243,7 @@ export class BattlefieldScene extends Phaser.Scene {
     }
     this.selectedAttackUnitKind = unitKind;
     this.setStatus(
-      `${UNIT_NAMES[unitKind]} 선택: 출격 포인트 ${attackUnitCost(unitKind)}, Q/W/E로 진입로에 추가합니다.`,
+      `${UNIT_NAMES[unitKind]} 선택: 전장의 진입 지점을 클릭하거나 Q/W/E로 추가합니다.`,
     );
     this.updatePhaseInterface();
     this.renderBattlefield();
@@ -1288,6 +1298,10 @@ export class BattlefieldScene extends Phaser.Scene {
     }
     if (this.phase === 'attack-combat' && this.isDisruptTargeting) {
       this.handleDisruptTargetPointer(pointer);
+      return;
+    }
+    if (this.phase === 'attack-preparation') {
+      this.handleAttackPreparationPointer(pointer);
       return;
     }
     if (this.phase !== 'preparation') {
@@ -1351,9 +1365,23 @@ export class BattlefieldScene extends Phaser.Scene {
     this.renderBattlefield();
   }
 
+  private handleAttackPreparationPointer(pointer: Phaser.Input.Pointer): void {
+    const laneIndex = this.attackEntryPointResolver.laneIndexAt(
+      this.pointerToGrid(pointer),
+    );
+    if (laneIndex === null) return;
+
+    if (pointer.rightButtonDown()) {
+      this.removeUnitFromLane(laneIndex);
+      return;
+    }
+    this.addUnitToLane(laneIndex);
+  }
+
   private handlePointerMove(pointer: Phaser.Input.Pointer): void {
     const showsBoardInteraction =
       this.phase === 'preparation' ||
+      this.phase === 'attack-preparation' ||
       (this.phase === 'attack-combat' &&
         (this.isFocusTargeting || this.isDisruptTargeting));
     const nextPosition = showsBoardInteraction
@@ -1522,6 +1550,7 @@ export class BattlefieldScene extends Phaser.Scene {
     this.renderGrid();
     this.renderStructures();
     this.renderPlacementPreview();
+    this.renderAttackLanePlacement();
     this.renderEnemies();
     this.renderAttackers();
     this.missionPanel.render(this.missionPanelModel());
@@ -1532,6 +1561,24 @@ export class BattlefieldScene extends Phaser.Scene {
       this.placementPreviewModel(),
       this.selectedTowerRangeModel(),
     );
+  }
+
+  private renderAttackLanePlacement(): void {
+    this.attackLanePlacementRenderer.render(this.attackLanePlacementModel());
+  }
+
+  private attackLanePlacementModel(): AttackLanePlacementModel | null {
+    if (this.phase !== 'attack-preparation' || this.squadPlan === null) {
+      return null;
+    }
+    return {
+      entryPoints: this.editor.battlefield.map.entryPoints,
+      hoveredPosition: this.hoveredGridPosition,
+      selectedLane: this.selectedAttackLane,
+      selectedUnit: this.selectedAttackUnitKind,
+      lanes: this.squadPlan.lanes,
+      remainingPoints: this.squadPlan.remainingSortiePoints,
+    };
   }
 
   private placementPreviewModel(): PlacementPreviewModel | null {
@@ -2612,7 +2659,7 @@ export class BattlefieldScene extends Phaser.Scene {
             : [`보상 · 기본 ${reward.basePoints} + 처치 ${reward.killBonus} + 코어 ${reward.coreHealthBonus}`]),
         ],
         selection: `${UNIT_NAMES[this.selectedAttackUnitKind]} · ${attackUnitCost(this.selectedAttackUnitKind)}P\n강함 · ${unitCounterSummary(this.selectedAttackUnitKind)}`,
-        tip: `유닛 선택 → 진입로 추가\n동시 ${SIMULTANEOUS_CAPACITY_PER_LANE}명 · 이후 ${SQUAD_SPAWN_INTERVAL_MS / 1000}초\n[Space] 공격 시작`,
+        tip: `유닛 선택 → 전장 진입로 클릭\n우클릭 마지막 제거 · 동시 ${SIMULTANEOUS_CAPACITY_PER_LANE}명\n[Space] 공격 시작`,
       };
     }
 
@@ -2734,6 +2781,8 @@ export class BattlefieldScene extends Phaser.Scene {
     this.game.canvas.dataset.guideMode = this.firstRunGuide.isDetailed
       ? 'detailed'
       : 'brief';
+    this.game.canvas.dataset.attackLaneCounts =
+      this.squadPlan?.lanes.map((lane) => lane.length).join(',') ?? '';
     this.game.canvas.setAttribute(
       'aria-label',
       `Toy Base Reversal · ${phaseLabels[this.phase]}`,

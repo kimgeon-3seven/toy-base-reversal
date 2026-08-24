@@ -9,6 +9,8 @@ export interface BattlefieldSpriteState {
   readonly x: number;
   readonly y: number;
   readonly displaySize: number;
+  readonly displayWidth?: number;
+  readonly displayHeight?: number;
   readonly depth: number;
   readonly naturalFacingDegrees: number;
   readonly initialFacingDegrees: number;
@@ -74,6 +76,10 @@ export class BattlefieldSpriteView {
     const deltaY = state.y - this.previousY;
     const isMoving = Math.hypot(deltaX, deltaY) > 0.001;
 
+    if (state.facingMode === 'static') {
+      this.worldFacingDegrees = state.initialFacingDegrees;
+    }
+
     if (
       isMoving &&
       state.facingMode !== 'static' &&
@@ -132,8 +138,8 @@ export class BattlefieldSpriteView {
         state.y + bob + this.recoilY * recoilRatio,
       )
       .setDisplaySize(
-        state.displaySize * hitStretch,
-        state.displaySize / hitStretch,
+        (state.displayWidth ?? state.displaySize) * hitStretch,
+        (state.displayHeight ?? state.displaySize) / hitStretch,
       )
       .setDepth(state.depth)
       .setAngle(this.renderedRotationDegrees + disruptionWobble)
