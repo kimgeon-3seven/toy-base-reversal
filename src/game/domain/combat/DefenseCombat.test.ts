@@ -221,7 +221,12 @@ describe('DefenseCombat', () => {
 
     expect(combat.drainEvents()).toEqual(
       expect.arrayContaining([
-        expect.objectContaining({ type: 'attack', style: 'popgun' }),
+        expect.objectContaining({
+          type: 'attack',
+          style: 'popgun',
+          damage: expect.any(Number),
+          effectiveness: expect.stringMatching(/normal|favored/),
+        }),
         expect.objectContaining({ type: 'destroyed', targetKind: 'unit' }),
       ]),
     );

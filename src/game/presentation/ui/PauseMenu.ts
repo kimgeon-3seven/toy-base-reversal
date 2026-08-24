@@ -1,6 +1,8 @@
 import type Phaser from 'phaser';
 import { GAME_HEIGHT, GAME_WIDTH } from '../../config/GameConfig';
+import { IMAGE_ASSETS } from '../assets/GameAssets';
 import { TextButton } from './TextButton';
+import { TOY_UI } from './ToyUiTheme';
 
 export interface PauseMenuActions {
   readonly pause: () => void;
@@ -22,17 +24,17 @@ export class PauseMenu {
   public constructor(scene: Phaser.Scene, actions: PauseMenuActions) {
     this.pauseButton = new TextButton(
       scene,
-      770,
+      832,
       50,
-      132,
+      84,
       38,
-      '일시정지',
+      'Ⅱ 멈춤',
       actions.pause,
     );
     this.pauseButton.setDepth(143);
 
     const backdrop = scene.add
-      .rectangle(0, 0, GAME_WIDTH, GAME_HEIGHT, 0x090712, 0.82)
+      .rectangle(0, 0, GAME_WIDTH, GAME_HEIGHT, 0x10251e, 0.82)
       .setInteractive();
     backdrop.on(
       'pointerdown',
@@ -43,13 +45,19 @@ export class PauseMenu {
         event: Phaser.Types.Input.EventData,
       ) => event.stopPropagation(),
     );
+    const paper = scene.add
+      .image(0, 0, IMAGE_ASSETS.paperTexture)
+      .setDisplaySize(560, 390)
+      .setAlpha(0.99);
     const panel = scene.add
-      .rectangle(0, 0, 560, 390, 0x262238, 1)
-      .setStrokeStyle(3, 0xffd166, 0.95);
+      .rectangle(0, 0, 560, 390, TOY_UI.paper, 0.1)
+      .setStrokeStyle(4, TOY_UI.teal, 0.95);
+    const tapeLeft = scene.add.rectangle(-195, -196, 80, 20, 0xe4cc8f, 0.75).setAngle(-5);
+    const tapeRight = scene.add.rectangle(195, -196, 80, 20, 0xe4cc8f, 0.75).setAngle(5);
     this.title = scene.add
       .text(0, -132, '일시정지', {
-        color: '#ffd166',
-        fontFamily: 'Arial, sans-serif',
+        color: '#0b615a',
+        fontFamily: TOY_UI.fontFamily,
         fontSize: '34px',
         fontStyle: 'bold',
       })
@@ -57,8 +65,8 @@ export class PauseMenu {
     this.body = scene.add
       .text(0, -70, '전투와 모든 타이머가 멈췄습니다.', {
         align: 'center',
-        color: '#f8f4e8',
-        fontFamily: 'Arial, sans-serif',
+        color: TOY_UI.ink,
+        fontFamily: TOY_UI.fontFamily,
         fontSize: '19px',
         lineSpacing: 7,
         wordWrap: { width: 450 },
@@ -72,6 +80,12 @@ export class PauseMenu {
       48,
       '계속하기',
       actions.resume,
+      {
+        fill: TOY_UI.teal,
+        hover: 0x22b7a6,
+        stroke: TOY_UI.tealDark,
+        text: '#fffdf3',
+      },
     );
     this.exitButton = new TextButton(
       scene,
@@ -82,9 +96,9 @@ export class PauseMenu {
       '게임 나가기',
       () => this.showExitConfirmation(),
       {
-        fill: 0x4c2f3a,
-        hover: 0x6a3c49,
-        stroke: 0xff7b8f,
+        fill: TOY_UI.coral,
+        hover: 0xf47768,
+        stroke: TOY_UI.coralDark,
         text: '#fff2f4',
       },
     );
@@ -97,9 +111,9 @@ export class PauseMenu {
       '나가기 확인',
       actions.exitToOpening,
       {
-        fill: 0x4c2f3a,
-        hover: 0x6a3c49,
-        stroke: 0xff7b8f,
+        fill: TOY_UI.coral,
+        hover: 0xf47768,
+        stroke: TOY_UI.coralDark,
         text: '#fff2f4',
       },
     );
@@ -115,7 +129,10 @@ export class PauseMenu {
     this.overlay = scene.add
       .container(GAME_WIDTH / 2, GAME_HEIGHT / 2, [
         backdrop,
+        paper,
         panel,
+        tapeLeft,
+        tapeRight,
         this.title,
         this.body,
         this.resumeButton.gameObject,

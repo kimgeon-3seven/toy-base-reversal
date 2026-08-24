@@ -10,6 +10,7 @@ import {
   type StructureKind,
 } from '../domain/structures/DefenseStructure';
 import type {
+  DefenseEditFailureReason,
   DefenseEditResult,
   DefenseSaleResult,
   DefenseUpgradeResult,
@@ -67,6 +68,21 @@ export class DefenseEditor {
       this.economy.costForStructure(structure) +
       this.upgradePolicy.totalUpgradeInvestment(structure)
     );
+  }
+
+  public previewPlacement(
+    kind: StructureKind,
+    position: GridPosition,
+    towerArchetype: TowerArchetype | null,
+    movingStructureId: string | null = null,
+  ): DefenseEditFailureReason | null {
+    if (movingStructureId === null) {
+      const constructionCost = this.economy.costFor(kind, towerArchetype);
+      if (!this.economy.canAfford(constructionCost)) {
+        return 'insufficient-funds';
+      }
+    }
+    return this.battlefield.previewPlacement(position, movingStructureId);
   }
 
   public place(

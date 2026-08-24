@@ -1,6 +1,6 @@
 :root {
-  color: #f8f4e8;
-  background: #15131e;
+  color: #332617;
+  background: #122b28;
   font-family: Inter, Pretendard, system-ui, -apple-system, BlinkMacSystemFont,
     'Segoe UI', sans-serif;
   font-synthesis: none;
@@ -28,10 +28,15 @@ body,
 body {
   display: grid;
   place-items: center;
+  background:
+    radial-gradient(circle at 18% 12%, rgb(233 94 79 / 18%), transparent 30%),
+    radial-gradient(circle at 82% 88%, rgb(21 155 140 / 20%), transparent 34%),
+    #122b28;
 }
 
 canvas {
   display: block;
+  box-shadow: 0 22px 70px rgb(0 0 0 / 45%);
 }
 
 .nickname-dialog-backdrop {
@@ -47,9 +52,9 @@ canvas {
 .nickname-dialog {
   width: min(460px, 100%);
   padding: 28px;
-  border: 2px solid #ffd166;
-  border-radius: 14px;
-  background: #262238;
+  border: 3px solid #159b8c;
+  border-radius: 8px;
+  background: #fff4d6;
   box-shadow: 0 18px 60px rgb(0 0 0 / 45%);
 }
 
@@ -59,29 +64,29 @@ canvas {
 }
 
 .nickname-dialog h2 {
-  color: #ffd166;
+  color: #9d332e;
   font-size: 26px;
 }
 
 .nickname-dialog p {
-  color: #d9d3e8;
+  color: #6f604d;
   line-height: 1.5;
 }
 
 .nickname-dialog input {
   width: 100%;
   padding: 12px 14px;
-  border: 2px solid #554b78;
+  border: 2px solid #b98247;
   border-radius: 8px;
   outline: none;
-  background: #171321;
-  color: #f8f4e8;
+  background: #fffdf3;
+  color: #332617;
   font: inherit;
   font-size: 18px;
 }
 
 .nickname-dialog input:focus {
-  border-color: #9fe3c3;
+  border-color: #159b8c;
 }
 
 .nickname-dialog .nickname-dialog-error {
@@ -98,16 +103,17 @@ canvas {
 
 .nickname-dialog button {
   padding: 10px 18px;
-  border: 1px solid #756b93;
+  border: 1px solid #8f6b3b;
   border-radius: 8px;
-  background: #3a3450;
-  color: #f8f4e8;
+  background: #f0dfb8;
+  color: #332617;
   font: inherit;
   font-weight: 700;
   cursor: pointer;
 }
 
 .nickname-dialog button[type='submit'] {
-  border-color: #9fe3c3;
-  background: #336b61;
+  border-color: #0b615a;
+  background: #159b8c;
+  color: #fffdf3;
 }

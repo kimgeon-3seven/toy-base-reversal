@@ -51,6 +51,29 @@ describe('Battlefield', () => {
     expect(battlefield.structures).toHaveLength(2);
   });
 
+  it('previews a blocked placement without mutating the battlefield', () => {
+    const battlefield = createNarrowBattlefield();
+    battlefield.place(obstacle('top', 2, 0));
+    battlefield.place(obstacle('middle', 2, 1));
+
+    expect(battlefield.previewPlacement(new GridPosition(2, 2))).toBe(
+      'path-blocked',
+    );
+    expect(battlefield.structures.map((structure) => structure.id)).toEqual([
+      'top',
+      'middle',
+    ]);
+  });
+
+  it('previews a move while ignoring the structure being moved', () => {
+    const battlefield = createNarrowBattlefield();
+    battlefield.place(obstacle('movable', 2, 1));
+
+    expect(
+      battlefield.previewPlacement(new GridPosition(2, 1), 'movable'),
+    ).toBeNull();
+  });
+
   it('restores the original position after an invalid move', () => {
     const battlefield = createNarrowBattlefield();
     battlefield.place(obstacle('top', 2, 0));

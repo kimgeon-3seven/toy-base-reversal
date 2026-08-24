@@ -14,6 +14,8 @@ export const IMAGE_ASSETS = {
   attackerRanger: 'attacker-ranger',
   commander: 'commander',
   core: 'core',
+  paperTexture: 'ui-paper-texture',
+  roleReversalEmblem: 'ui-role-reversal-emblem',
   impactSpark: 'impact-spark',
   muzzleFlash: 'muzzle-flash',
   abilityBurst: 'ability-burst',
@@ -47,18 +49,26 @@ export function preloadGameAssets(loader: Phaser.Loader.LoaderPlugin): void {
     IMAGE_ASSETS.battlefieldBackground,
     assetUrl('backgrounds/toy-battlefield-v1.png'),
   );
-  loader.image(IMAGE_ASSETS.towerPopgun, assetUrl(`${sprites}/tower-popgun.png`));
-  loader.image(IMAGE_ASSETS.towerMortar, assetUrl(`${sprites}/tower-mortar.png`));
-  loader.image(IMAGE_ASSETS.towerPiercer, assetUrl(`${sprites}/tower-piercer.png`));
+  loader.image(IMAGE_ASSETS.towerPopgun, assetUrl(`${sprites}/tower-popgun-v2.png`));
+  loader.image(IMAGE_ASSETS.towerMortar, assetUrl(`${sprites}/tower-mortar-v2.png`));
+  loader.image(IMAGE_ASSETS.towerPiercer, assetUrl(`${sprites}/tower-piercer-v2.png`));
   loader.image(IMAGE_ASSETS.obstacle, assetUrl(`${sprites}/obstacle.png`));
-  loader.image(IMAGE_ASSETS.defenderTank, assetUrl(`${sprites}/defender-tank.png`));
-  loader.image(IMAGE_ASSETS.defenderSwarm, assetUrl(`${sprites}/defender-swarm.png`));
-  loader.image(IMAGE_ASSETS.defenderRanger, assetUrl(`${sprites}/defender-ranger.png`));
-  loader.image(IMAGE_ASSETS.attackerTank, assetUrl(`${sprites}/attacker-tank.png`));
-  loader.image(IMAGE_ASSETS.attackerSwarm, assetUrl(`${sprites}/attacker-swarm.png`));
-  loader.image(IMAGE_ASSETS.attackerRanger, assetUrl(`${sprites}/attacker-ranger.png`));
-  loader.image(IMAGE_ASSETS.commander, assetUrl(`${sprites}/commander.png`));
-  loader.image(IMAGE_ASSETS.core, assetUrl(`${sprites}/core.png`));
+  loader.image(IMAGE_ASSETS.defenderTank, assetUrl(`${sprites}/unit-shield-v2.png`));
+  loader.image(IMAGE_ASSETS.defenderSwarm, assetUrl(`${sprites}/unit-windup-v2.png`));
+  loader.image(IMAGE_ASSETS.defenderRanger, assetUrl(`${sprites}/unit-ranger-v2.png`));
+  loader.image(IMAGE_ASSETS.attackerTank, assetUrl(`${sprites}/unit-shield-v2.png`));
+  loader.image(IMAGE_ASSETS.attackerSwarm, assetUrl(`${sprites}/unit-windup-v2.png`));
+  loader.image(IMAGE_ASSETS.attackerRanger, assetUrl(`${sprites}/unit-ranger-v2.png`));
+  loader.image(IMAGE_ASSETS.commander, assetUrl(`${sprites}/commander-v2.png`));
+  loader.image(IMAGE_ASSETS.core, assetUrl(`${sprites}/core-v2.png`));
+  loader.image(
+    IMAGE_ASSETS.paperTexture,
+    assetUrl('ui/paper-texture-v1.png'),
+  );
+  loader.image(
+    IMAGE_ASSETS.roleReversalEmblem,
+    assetUrl('ui/role-reversal-emblem-v1.png'),
+  );
 
   loader.image(IMAGE_ASSETS.impactSpark, assetUrl('vfx/impact-spark.png'));
   loader.image(IMAGE_ASSETS.muzzleFlash, assetUrl('vfx/muzzle-flash.png'));

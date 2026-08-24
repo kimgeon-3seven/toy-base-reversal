@@ -344,8 +344,15 @@ describe('AttackCombat', () => {
 
     expect(combat.drainEvents()).toEqual(
       expect.arrayContaining([
-        expect.objectContaining({ type: 'attack', style: 'unit' }),
-        expect.objectContaining({ type: 'core-hit' }),
+        expect.objectContaining({
+          type: 'attack',
+          style: 'unit',
+          damage: expect.any(Number),
+        }),
+        expect.objectContaining({
+          type: 'core-hit',
+          damage: expect.any(Number),
+        }),
       ]),
     );
     expect(combat.drainEvents()).toEqual([]);

@@ -19,10 +19,10 @@ export class BattlefieldBackdropRenderer {
       .image(centerX, centerY, IMAGE_ASSETS.battlefieldBackground)
       .setDisplaySize(width, height)
       .setDepth(1)
-      .setAlpha(0.82);
+      .setAlpha(0.96);
     scene.add
-      .rectangle(centerX, centerY, width, height, 0x092c2b, 0.18)
+      .rectangle(centerX, centerY, width, height, 0x092c2b, 0.08)
       .setDepth(2)
-      .setStrokeStyle(3, 0xd2b47a, 0.58);
+      .setStrokeStyle(4, 0xe5cf9c, 0.78);
   }
 }

@@ -42,6 +42,10 @@ export class AttackCommander {
     return this.currentDisruptCooldownRemainingMs === 0;
   }
 
+  public get focusCooldownRemainingMs(): number {
+    return this.focusFireCooldownRemainingMs;
+  }
+
   public get disruptCooldownRemainingMs(): number {
     return this.currentDisruptCooldownRemainingMs;
   }

@@ -32,6 +32,9 @@ export class BattlefieldSpriteRenderer {
   private readonly attackers = new Map<string, BattlefieldSpriteView>();
   private commander: BattlefieldSpriteView | null = null;
   private readonly core: BattlefieldSpriteView;
+  private readonly coreHud: Phaser.GameObjects.Graphics;
+  private readonly coreLabel: Phaser.GameObjects.Text;
+  private readonly commanderLabel: Phaser.GameObjects.Text;
 
   public constructor(private readonly scene: Phaser.Scene) {
     this.core = new BattlefieldSpriteView(
@@ -40,10 +43,45 @@ export class BattlefieldSpriteRenderer {
       'core',
       this.coreState(0, 0, 1),
     );
+    this.coreHud = scene.add.graphics().setDepth(29);
+    this.coreLabel = scene.add
+      .text(0, 0, '', {
+        backgroundColor: '#171321dd',
+        color: '#d8ffd0',
+        fontFamily: 'Arial, sans-serif',
+        fontSize: '11px',
+        fontStyle: 'bold',
+        padding: { x: 5, y: 2 },
+      })
+      .setOrigin(0.5)
+      .setDepth(29);
+    this.commanderLabel = scene.add
+      .text(0, 0, '지휘관', {
+        backgroundColor: '#173d3bcc',
+        color: '#dffff7',
+        fontFamily: 'Arial, sans-serif',
+        fontSize: '11px',
+        fontStyle: 'bold',
+        padding: { x: 5, y: 2 },
+      })
+      .setOrigin(0.5)
+      .setDepth(29)
+      .setVisible(false);
   }
 
   public renderCore(column: number, row: number, healthRatio: number): void {
     this.core.sync(this.coreState(column, row, healthRatio));
+    const point = this.toWorld(column, row);
+    const ratio = Phaser.Math.Clamp(healthRatio, 0, 1);
+    this.coreHud.clear();
+    this.coreHud.fillStyle(0x171321, 0.96);
+    this.coreHud.fillRoundedRect(point.x - 38, point.y - 42, 76, 8, 4);
+    this.coreHud.fillStyle(ratio > 0.4 ? 0x8bd17c : 0xff6b6b, 1);
+    this.coreHud.fillRoundedRect(point.x - 36, point.y - 40, 72 * ratio, 4, 2);
+    this.coreLabel
+      .setPosition(point.x, point.y + 39)
+      .setText(`코어 ${Math.round(ratio * 100)}%`)
+      .setColor(ratio > 0.4 ? '#d8ffd0' : '#ffd2d8');
   }
 
   public renderStructures(
@@ -58,8 +96,10 @@ export class BattlefieldSpriteRenderer {
         texture,
         x: point.x,
         y: point.y,
-        displaySize: structure.kind === 'obstacle' ? 53 : 58,
+        displaySize: structure.kind === 'obstacle' ? 53 : 66,
         depth: 12,
+        baseColor: structure.kind === 'obstacle' ? 0xb69c7b : 0xe95e4f,
+        baseScale: structure.kind === 'obstacle' ? 0.72 : 0.66,
         naturalFacingDegrees: this.facingProfile.naturalFacingDegrees(texture),
         initialFacingDegrees: 0,
         facingMode: structure.kind === 'tower' ? 'free' : 'static',
@@ -84,8 +124,15 @@ export class BattlefieldSpriteRenderer {
         texture,
         x: point.x,
         y: point.y,
-        displaySize: enemy.stats.archetype === 'tank' ? 60 : 54,
+        displaySize:
+          enemy.stats.archetype === 'tank'
+            ? 68
+            : enemy.stats.archetype === 'ranger'
+              ? 62
+              : 56,
         depth: 15,
+        baseColor: 0xe95e4f,
+        tint: 0xff8b82,
         naturalFacingDegrees: this.facingProfile.naturalFacingDegrees(texture),
         initialFacingDegrees: 0,
         facingMode: 'eight-way',
@@ -109,8 +156,11 @@ export class BattlefieldSpriteRenderer {
         texture,
         x: point.x,
         y: point.y,
-        displaySize: unit.kind === 'tank' ? 60 : 54,
+        displaySize:
+          unit.kind === 'tank' ? 68 : unit.kind === 'ranger' ? 62 : 56,
         depth: 16,
+        baseColor: 0x159b8c,
+        tint: 0x79e5d8,
         naturalFacingDegrees: this.facingProfile.naturalFacingDegrees(texture),
         initialFacingDegrees: 0,
         facingMode: 'eight-way',
@@ -124,6 +174,7 @@ export class BattlefieldSpriteRenderer {
     if (commander === null) {
       this.commander?.destroy();
       this.commander = null;
+      this.commanderLabel.setVisible(false);
       return;
     }
 
@@ -132,8 +183,10 @@ export class BattlefieldSpriteRenderer {
       texture: IMAGE_ASSETS.commander,
       x: point.x,
       y: point.y,
-      displaySize: 64,
+      displaySize: 76,
       depth: 17,
+      baseColor: 0xf2b544,
+      baseScale: 0.78,
       naturalFacingDegrees: this.facingProfile.naturalFacingDegrees(
         IMAGE_ASSETS.commander,
       ),
@@ -152,6 +205,9 @@ export class BattlefieldSpriteRenderer {
     } else {
       this.commander.sync(state);
     }
+    this.commanderLabel
+      .setPosition(point.x, point.y + 38)
+      .setVisible(commander.isAlive);
   }
 
   public present(events: readonly CombatEvent[]): void {
@@ -160,7 +216,9 @@ export class BattlefieldSpriteRenderer {
       const source = this.attackSourceFor(event);
       const targetPoint = this.toWorld(event.target.column, event.target.row);
       source?.playAttackToward(targetPoint.x, targetPoint.y);
-      this.nearestSpriteTo(event.target, this.allSprites())?.flashHit();
+      this.nearestSpriteTo(event.target, this.allSprites())?.flashHit(
+        event.effectiveness,
+      );
     }
   }
 
@@ -253,8 +311,10 @@ export class BattlefieldSpriteRenderer {
       texture: IMAGE_ASSETS.core,
       x: point.x,
       y: point.y,
-      displaySize: 58,
+      displaySize: 72,
       depth: 9,
+      baseColor: 0xf2b544,
+      baseScale: 0.82,
       naturalFacingDegrees: 0,
       initialFacingDegrees: 0,
       facingMode: 'static',

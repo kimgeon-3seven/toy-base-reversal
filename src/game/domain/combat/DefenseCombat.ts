@@ -182,13 +182,19 @@ export class DefenseCombat {
                   target.renderRow,
                 ) <= towerStats.splashRadiusInCells,
             );
+      const upgradeMultiplier =
+        this.config.towerUpgradePolicy.damageMultiplier(tower);
       for (const enemy of affectedEnemies) {
         enemy.takeDamage(
           towerStats.damage *
-            this.config.towerUpgradePolicy.damageMultiplier(tower) *
+            upgradeMultiplier *
             towerDamageMultiplier(towerArchetype, enemy.stats.archetype),
         );
       }
+      const targetMultiplier = towerDamageMultiplier(
+        towerArchetype,
+        target.stats.archetype,
+      );
       this.pendingEvents.push({
         type: 'attack',
         style: towerArchetype,
@@ -200,6 +206,8 @@ export class DefenseCombat {
           column: target.renderColumn,
           row: target.renderRow,
         },
+        damage: towerStats.damage * upgradeMultiplier * targetMultiplier,
+        effectiveness: targetMultiplier > 1 ? 'favored' : 'normal',
       });
       this.towerCooldowns.set(tower.id, towerStats.attackIntervalMs);
     }
@@ -265,10 +273,12 @@ export class DefenseCombat {
       return;
     }
 
-    structure.takeDamage(
-      enemy.stats.attackDamage *
-        unitDamageMultiplier(enemy.stats.archetype, structure.towerArchetype),
+    const damageMultiplier = unitDamageMultiplier(
+      enemy.stats.archetype,
+      structure.towerArchetype,
     );
+    const damage = enemy.stats.attackDamage * damageMultiplier;
+    structure.takeDamage(damage);
     this.pendingEvents.push({
       type: 'attack',
       style: 'unit',
@@ -280,6 +290,8 @@ export class DefenseCombat {
         column: structure.position.column,
         row: structure.position.row,
       },
+      damage,
+      effectiveness: damageMultiplier > 1 ? 'favored' : 'normal',
     });
     enemy.consumeAttack();
     if (structure.health === 0) {
@@ -314,6 +326,7 @@ export class DefenseCombat {
         column: this.battlefield.map.corePosition.column,
         row: this.battlefield.map.corePosition.row,
       },
+      damage: appliedDamage,
     });
     this.enemiesById.delete(enemy.id);
   }

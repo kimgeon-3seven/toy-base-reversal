@@ -1,4 +1,5 @@
 import type Phaser from 'phaser';
+import type { CombatHitEffectiveness } from '../../domain/combat/CombatEvent';
 import type { FacingDirectionResolver } from './FacingDirectionResolver';
 
 export type SpriteFacingMode = 'static' | 'eight-way' | 'free';
@@ -14,12 +15,15 @@ export interface BattlefieldSpriteState {
   readonly facingMode: SpriteFacingMode;
   readonly enableMovementBob: boolean;
   readonly isDisrupted?: boolean;
+  readonly baseColor?: number;
+  readonly baseScale?: number;
   readonly tint?: number;
   readonly alpha?: number;
 }
 
 export class BattlefieldSpriteView {
   private readonly shadow: Phaser.GameObjects.Ellipse;
+  private readonly toyBase: Phaser.GameObjects.Ellipse;
   private readonly image: Phaser.GameObjects.Image;
   private currentState: BattlefieldSpriteState;
   private worldFacingDegrees: number;
@@ -31,6 +35,8 @@ export class BattlefieldSpriteView {
   private recoilX = 0;
   private recoilY = 0;
   private hitFlashUntilMs = 0;
+  private hitReactionUntilMs = 0;
+  private hitReactionStrength = 0;
   private readonly motionPhase: number;
 
   public constructor(
@@ -51,6 +57,11 @@ export class BattlefieldSpriteView {
     this.shadow = scene.add
       .ellipse(initialState.x, initialState.y, 10, 5, 0x08070d, 0.28)
       .setDepth(initialState.depth - 1);
+    this.toyBase = scene.add
+      .ellipse(initialState.x, initialState.y, 10, 5, initialState.baseColor ?? 0xffffff, 0.9)
+      .setStrokeStyle(2, 0xfff4d6, 0.82)
+      .setDepth(initialState.depth - 0.5)
+      .setVisible(initialState.baseColor !== undefined);
     this.image = scene.add
       .image(initialState.x, initialState.y, initialState.texture)
       .setDepth(initialState.depth);
@@ -93,6 +104,10 @@ export class BattlefieldSpriteView {
       ? Math.sin(now * 0.045 + this.motionPhase) * 4
       : 0;
     const recoilRatio = Math.max(0, (this.recoilUntilMs - now) / 120);
+    const hitRatio = Math.max(0, (this.hitReactionUntilMs - now) / 150);
+    const hitShake =
+      Math.sin(now * 0.19 + this.motionPhase) * this.hitReactionStrength * hitRatio;
+    const hitStretch = 1 + hitRatio * this.hitReactionStrength * 0.012;
     const alpha = state.alpha ?? 1;
     const tint = state.tint ?? 0xffffff;
 
@@ -102,13 +117,24 @@ export class BattlefieldSpriteView {
       .setDepth(state.depth - 1)
       .setAlpha(0.28 * alpha)
       .setVisible(true);
+    const baseScale = state.baseScale ?? 0.62;
+    this.toyBase
+      .setPosition(state.x, state.y + state.displaySize * 0.27)
+      .setDisplaySize(state.displaySize * baseScale, state.displaySize * 0.24)
+      .setFillStyle(state.baseColor ?? 0xffffff, 0.92)
+      .setDepth(state.depth - 0.5)
+      .setAlpha(alpha)
+      .setVisible(state.baseColor !== undefined);
     this.image
       .setTexture(state.texture)
       .setPosition(
-        state.x + this.recoilX * recoilRatio,
+        state.x + this.recoilX * recoilRatio + hitShake,
         state.y + bob + this.recoilY * recoilRatio,
       )
-      .setDisplaySize(state.displaySize, state.displaySize)
+      .setDisplaySize(
+        state.displaySize * hitStretch,
+        state.displaySize / hitStretch,
+      )
       .setDepth(state.depth)
       .setAngle(this.renderedRotationDegrees + disruptionWobble)
       .setAlpha(alpha)
@@ -143,8 +169,11 @@ export class BattlefieldSpriteView {
     this.recoilY = (-deltaY / length) * 4;
   }
 
-  public flashHit(): void {
-    this.hitFlashUntilMs = this.scene.time.now + 90;
+  public flashHit(effectiveness: CombatHitEffectiveness): void {
+    const favored = effectiveness === 'favored';
+    this.hitFlashUntilMs = this.scene.time.now + (favored ? 135 : 90);
+    this.hitReactionUntilMs = this.scene.time.now + (favored ? 180 : 130);
+    this.hitReactionStrength = favored ? 5 : 2.5;
   }
 
   public distanceSquaredTo(x: number, y: number): number {
@@ -155,6 +184,7 @@ export class BattlefieldSpriteView {
 
   public destroy(): void {
     this.shadow.destroy();
+    this.toyBase.destroy();
     this.image.destroy();
   }
 

@@ -1,4 +1,5 @@
 import type Phaser from 'phaser';
+import { TOY_UI } from './ToyUiTheme';
 
 export interface TextButtonColors {
   readonly fill: number;
@@ -8,14 +9,15 @@ export interface TextButtonColors {
 }
 
 const DEFAULT_COLORS: TextButtonColors = {
-  fill: 0x342f49,
-  hover: 0x48405f,
-  stroke: 0x9fe3c3,
-  text: '#f8f4e8',
+  fill: 0xf0dfb8,
+  hover: 0xfff5d9,
+  stroke: 0x8f6b3b,
+  text: TOY_UI.ink,
 };
 
 export class TextButton {
   public readonly gameObject: Phaser.GameObjects.Container;
+  private readonly shadow: Phaser.GameObjects.Rectangle;
   private readonly background: Phaser.GameObjects.Rectangle;
   private readonly label: Phaser.GameObjects.Text;
   private enabled = true;
@@ -31,19 +33,24 @@ export class TextButton {
     onClick: () => void,
     private readonly colors: TextButtonColors = DEFAULT_COLORS,
   ) {
+    this.shadow = scene.add.rectangle(4, 5, width, height, TOY_UI.shadow, 0.42);
     this.background = scene.add
       .rectangle(0, 0, width, height, this.colors.fill, 1)
-      .setStrokeStyle(2, this.colors.stroke, 0.95)
+      .setStrokeStyle(2, this.colors.stroke, 0.92)
       .setInteractive({ useHandCursor: true });
     this.label = scene.add
       .text(0, 0, label, {
         color: this.colors.text,
-        fontFamily: 'Arial, sans-serif',
-        fontSize: '16px',
+        fontFamily: TOY_UI.fontFamily,
+        fontSize: '15px',
         fontStyle: 'bold',
       })
       .setOrigin(0.5);
-    this.gameObject = scene.add.container(x, y, [this.background, this.label]);
+    this.gameObject = scene.add.container(x, y, [
+      this.shadow,
+      this.background,
+      this.label,
+    ]);
 
     this.background.on(
       'pointerdown',
@@ -99,8 +106,9 @@ export class TextButton {
       .setFillStyle(this.selected ? this.colors.hover : this.colors.fill, 1)
       .setStrokeStyle(
         this.selected ? 4 : 2,
-        this.selected ? 0xffd166 : this.colors.stroke,
+        this.selected ? TOY_UI.coral : this.colors.stroke,
         0.95,
       );
+    this.shadow.setAlpha(this.selected ? 0.92 : 0.72);
   }
 }

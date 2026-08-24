@@ -4,6 +4,7 @@ import { attackUnitCost } from '../../domain/attack/SquadPlan';
 import { GAME_COLORS } from '../../config/GameConfig';
 import { UNIT_NAMES } from '../../config/ContentConfig';
 import { TextButton } from './TextButton';
+import { TOY_UI, ToyUiFactory } from './ToyUiTheme';
 
 export interface AttackFormationDeckModel {
   readonly selectedUnit: AttackUnitKind;
@@ -24,9 +25,9 @@ export interface AttackFormationDeckActions {
 
 const UNITS: readonly AttackUnitKind[] = ['tank', 'swarm', 'ranger'];
 const UNIT_MARKS: Readonly<Record<AttackUnitKind, string>> = {
-  tank: '방패',
-  swarm: '군단',
-  ranger: '사수',
+  tank: '◆ 방패',
+  swarm: '● 군단',
+  ranger: '➤ 사수',
 };
 
 export class AttackFormationDeck {
@@ -42,23 +43,32 @@ export class AttackFormationDeck {
     scene: Phaser.Scene,
     actions: AttackFormationDeckActions,
   ) {
-    const panel = scene.add
-      .rectangle(0, 0, 940, 180, 0x171321, 0.97)
-      .setOrigin(0)
-      .setStrokeStyle(3, 0x9fe3c3, 0.96);
-    const title = scene.add.text(20, 14, '공격 편성 보드', {
-      color: GAME_COLORS.primary,
-      fontFamily: 'Arial, sans-serif',
+    const ui = new ToyUiFactory(scene);
+    const panel = ui.createPaperPanel(940, 180, {
+      accent: TOY_UI.teal,
+      tape: true,
+    });
+    const title = scene.add.text(20, 14, '공격 편성판', {
+      color: TOY_UI.tealDark === 0x0b615a ? '#0b615a' : GAME_COLORS.primary,
+      fontFamily: TOY_UI.fontFamily,
       fontSize: '22px',
+      fontStyle: 'bold',
+    });
+    const subtitle = scene.add.text(164, 19, '내 방어선의 약점을 노려 출격 순서를 정하세요', {
+      color: TOY_UI.mutedInk,
+      fontFamily: TOY_UI.fontFamily,
+      fontSize: '13px',
       fontStyle: 'bold',
     });
     this.budgetText = scene.add
       .text(920, 17, '', {
         align: 'right',
-        color: GAME_COLORS.secondary,
-        fontFamily: 'Arial, sans-serif',
+        backgroundColor: '#dce9d2',
+        color: '#0b615a',
+        fontFamily: TOY_UI.fontFamily,
         fontSize: '17px',
         fontStyle: 'bold',
+        padding: { x: 9, y: 4 },
       })
       .setOrigin(1, 0);
 
@@ -68,9 +78,9 @@ export class AttackFormationDeck {
       const button = new TextButton(
         scene,
         96 + index * 164,
-        50,
+        54,
         154,
-        32,
+        38,
         '',
         () => actions.selectUnit(unit),
       );
@@ -82,33 +92,33 @@ export class AttackFormationDeck {
     const recommendButton = new TextButton(
       scene,
       583,
-      50,
+      54,
       130,
-      32,
+      38,
       '추천 편성 [P]',
       actions.recommend,
     );
     const clearButton = new TextButton(
       scene,
       707,
-      50,
+      54,
       100,
-      32,
+      38,
       '전체 비우기',
       actions.clear,
     );
     this.startButton = new TextButton(
       scene,
       849,
-      50,
+      54,
       160,
-      32,
-      '공격 시작 [Space]',
+      38,
+      '▶ 공격 시작 [Space]',
       actions.start,
       {
-        fill: 0x1f675b,
-        hover: 0x2d8c7d,
-        stroke: 0x9fe3c3,
+        fill: TOY_UI.teal,
+        hover: 0x22b7a6,
+        stroke: TOY_UI.tealDark,
         text: '#f4fffb',
       },
     );
@@ -120,8 +130,8 @@ export class AttackFormationDeck {
     for (let laneIndex = 0; laneIndex < 3; laneIndex += 1) {
       const y = 88 + laneIndex * 36;
       const queue = scene.add.text(126, y - 9, '', {
-        color: '#f8f4e8',
-        fontFamily: 'Arial, sans-serif',
+        color: TOY_UI.ink,
+        fontFamily: TOY_UI.fontFamily,
         fontSize: '14px',
       });
       const add = new TextButton(
@@ -153,15 +163,16 @@ export class AttackFormationDeck {
 
     const laneLabels = Array.from({ length: 3 }, (_, laneIndex) =>
       scene.add.text(20, 79 + laneIndex * 36, `${laneIndex + 1}번 진입로`, {
-        color: GAME_COLORS.primary,
-        fontFamily: 'Arial, sans-serif',
+        color: '#9d332e',
+        fontFamily: TOY_UI.fontFamily,
         fontSize: '15px',
         fontStyle: 'bold',
       }),
     );
     this.container = scene.add.container(42, 520, [
-      panel,
+      ...panel,
       title,
+      subtitle,
       this.budgetText,
       ...laneLabels,
       ...laneTexts,
@@ -179,8 +190,8 @@ export class AttackFormationDeck {
       const available = model.availableUnits.includes(unit);
       button?.setLabel(
         available
-          ? `${UNIT_NAMES[unit]} · ${attackUnitCost(unit)}P`
-          : `${UNIT_NAMES[unit]} · 잠김`,
+          ? `${UNIT_MARKS[unit]}  ${UNIT_NAMES[unit]} · ${attackUnitCost(unit)}P`
+          : `◇ ${UNIT_NAMES[unit]} · 잠김`,
       );
       button?.setEnabled(available);
       button?.setSelected(model.selectedUnit === unit);

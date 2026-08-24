@@ -177,6 +177,10 @@ export class AttackCombat {
     return this.commander.disruptCooldownRemainingMs;
   }
 
+  public get focusCooldownRemainingMs(): number {
+    return this.commander.focusCooldownRemainingMs;
+  }
+
   public get activeDisruptions(): readonly ActiveDisruption[] {
     return [...this.disabledTowerRemainingMs].map(([towerId, remainingMs]) => ({
       towerId,
@@ -424,6 +428,14 @@ export class AttackCombat {
             multiplier,
         );
       }
+      const targetMultiplier =
+        target.archetype === null
+          ? 1
+          : towerDamageMultiplier(towerArchetype, target.archetype);
+      const targetDamage =
+        towerStats.damage *
+        this.config.towerUpgradePolicy.damageMultiplier(tower) *
+        targetMultiplier;
       this.pendingEvents.push({
         type: 'attack',
         style: towerArchetype,
@@ -435,6 +447,8 @@ export class AttackCombat {
           column: target.column,
           row: target.row,
         },
+        damage: targetDamage,
+        effectiveness: targetMultiplier > 1 ? 'favored' : 'normal',
       });
       this.towerCooldowns.set(tower.id, towerStats.attackIntervalMs);
     }
@@ -456,10 +470,12 @@ export class AttackCombat {
         this.unitPathStepCache.delete(unit.id);
         unit.cancelMovement();
         if (unit.canAttack()) {
-          target.takeDamage(
-            unit.stats.attackDamage *
-              unitDamageMultiplier(unit.kind, target.towerArchetype),
+          const damageMultiplier = unitDamageMultiplier(
+            unit.kind,
+            target.towerArchetype,
           );
+          const damage = unit.stats.attackDamage * damageMultiplier;
+          target.takeDamage(damage);
           this.pendingEvents.push({
             type: 'attack',
             style: 'unit',
@@ -471,6 +487,8 @@ export class AttackCombat {
               column: target.position.column,
               row: target.position.row,
             },
+            damage,
+            effectiveness: damageMultiplier > 1 ? 'favored' : 'normal',
           });
           unit.consumeAttack();
         }
@@ -488,6 +506,10 @@ export class AttackCombat {
         this.unitPathStepCache.delete(unit.id);
         unit.cancelMovement();
         if (unit.canAttack()) {
+          const appliedDamage = Math.min(
+            this.currentCoreHealth,
+            unit.stats.attackDamage,
+          );
           this.currentCoreHealth = Math.max(
             0,
             this.currentCoreHealth - unit.stats.attackDamage,
@@ -503,6 +525,8 @@ export class AttackCombat {
               column: this.battlefield.map.corePosition.column,
               row: this.battlefield.map.corePosition.row,
             },
+            damage: appliedDamage,
+            effectiveness: 'normal',
           });
           this.pendingEvents.push({
             type: 'core-hit',
@@ -510,6 +534,7 @@ export class AttackCombat {
               column: this.battlefield.map.corePosition.column,
               row: this.battlefield.map.corePosition.row,
             },
+            damage: appliedDamage,
           });
           unit.consumeAttack();
         }
@@ -551,10 +576,12 @@ export class AttackCombat {
       this.unitPathStepCache.delete(unit.id);
       unit.cancelMovement();
       if (unit.canAttack()) {
-        target.takeDamage(
-          unit.stats.attackDamage *
-            unitDamageMultiplier(unit.kind, target.towerArchetype),
+        const damageMultiplier = unitDamageMultiplier(
+          unit.kind,
+          target.towerArchetype,
         );
+        const damage = unit.stats.attackDamage * damageMultiplier;
+        target.takeDamage(damage);
         this.pendingEvents.push({
           type: 'attack',
           style: 'unit',
@@ -566,6 +593,8 @@ export class AttackCombat {
             column: target.position.column,
             row: target.position.row,
           },
+          damage,
+          effectiveness: damageMultiplier > 1 ? 'favored' : 'normal',
         });
         unit.consumeAttack();
       }
@@ -608,6 +637,8 @@ export class AttackCombat {
           column: target.position.column,
           row: target.position.row,
         },
+        damage: this.commander.attackDamage,
+        effectiveness: 'normal',
       });
       this.commander.consumeAttack();
       return;
@@ -618,6 +649,10 @@ export class AttackCombat {
         this.battlefield.map.corePosition,
       ) <= this.commander.attackRange
     ) {
+      const appliedDamage = Math.min(
+        this.currentCoreHealth,
+        this.commander.attackDamage,
+      );
       this.currentCoreHealth = Math.max(
         0,
         this.currentCoreHealth - this.commander.attackDamage,
@@ -633,6 +668,8 @@ export class AttackCombat {
           column: this.battlefield.map.corePosition.column,
           row: this.battlefield.map.corePosition.row,
         },
+        damage: appliedDamage,
+        effectiveness: 'normal',
       });
       this.pendingEvents.push({
         type: 'core-hit',
@@ -640,6 +677,7 @@ export class AttackCombat {
           column: this.battlefield.map.corePosition.column,
           row: this.battlefield.map.corePosition.row,
         },
+        damage: appliedDamage,
       });
       this.commander.consumeAttack();
     }

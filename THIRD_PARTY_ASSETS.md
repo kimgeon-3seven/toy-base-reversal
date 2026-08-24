@@ -11,13 +11,30 @@ not a third-party asset. The production prompt requested an orthographic
 top-down wooden desk and a calm green felt-and-cardboard play surface, with no
 characters, structures, grid, text, logos, or watermark.
 
+The following project-owned UI and character artwork was generated with
+OpenAI's built-in image generation tool on 2026-08-24. The prompts requested
+original molded-plastic tabletop toys and unbranded handcrafted paper surfaces,
+with transparent backgrounds where appropriate and no text, logos, or
+watermarks:
+
+- `public/assets/ui/paper-texture-v1.png`
+- `public/assets/ui/role-reversal-emblem-v1.png`
+- `public/assets/sprites/tower-defense/unit-shield-v2.png`
+- `public/assets/sprites/tower-defense/unit-windup-v2.png`
+- `public/assets/sprites/tower-defense/unit-ranger-v2.png`
+- `public/assets/sprites/tower-defense/commander-v2.png`
+- `public/assets/sprites/tower-defense/tower-popgun-v2.png`
+- `public/assets/sprites/tower-defense/tower-mortar-v2.png`
+- `public/assets/sprites/tower-defense/tower-piercer-v2.png`
+- `public/assets/sprites/tower-defense/core-v2.png`
+
 ## Kenney
 
 Creator: Kenney Vleugels / Kenney.nl  
 License: [Creative Commons Zero 1.0](https://creativecommons.org/publicdomain/zero/1.0/)
 
 - [Tower Defense (Top-Down)](https://kenney.nl/assets/tower-defense-top-down)
-  - Selected tower, obstacle, unit, commander, and core sprites.
+  - Selected tower, obstacle, and core sprites.
 - [Particle Pack](https://kenney.nl/assets/particle-pack)
   - Selected muzzle, projectile, impact, and ability textures.
 - [Smoke Particles](https://kenney.nl/assets/smoke-particles)

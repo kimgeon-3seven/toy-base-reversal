@@ -7,6 +7,7 @@ import {
 import type {
   CombatAttackStyle,
   CombatEvent,
+  CombatHitEffectiveness,
   CombatPoint,
 } from '../../domain/combat/CombatEvent';
 import { IMAGE_ASSETS } from '../assets/GameAssets';
@@ -20,16 +21,34 @@ const ATTACK_COLORS: Readonly<Record<CombatAttackStyle, number>> = {
 };
 
 export class BattlefieldEffects {
+  private readonly lastFavoredCalloutAt = new Map<string, number>();
+
   public constructor(private readonly scene: Phaser.Scene) {}
 
   public present(events: readonly CombatEvent[]): void {
     for (const event of events) {
       if (event.type === 'attack') {
-        this.playAttack(event.source, event.target, event.style);
+        this.playAttack(
+          event.source,
+          event.target,
+          event.style,
+          event.effectiveness,
+          event.damage,
+        );
       } else if (event.type === 'destroyed') {
         this.playDestruction(event.position, event.targetKind === 'structure');
+        this.playCallout(
+          event.position,
+          event.targetKind === 'structure' ? '방어 시설 파괴!' : '격파!',
+          event.targetKind === 'structure' ? '#ffd166' : '#9fe3c3',
+        );
       } else {
         this.playCoreHit(event.position);
+        this.playCallout(
+          event.position,
+          `코어 -${Math.max(1, Math.round(event.damage))}`,
+          '#ff9bab',
+        );
       }
     }
   }
@@ -58,6 +77,8 @@ export class BattlefieldEffects {
     sourcePosition: CombatPoint,
     targetPosition: CombatPoint,
     style: CombatAttackStyle,
+    effectiveness: CombatHitEffectiveness,
+    damage: number,
   ): void {
     const source = this.toWorld(sourcePosition);
     const target = this.toWorld(targetPosition);
@@ -65,12 +86,29 @@ export class BattlefieldEffects {
     const angle = Phaser.Math.RadToDeg(
       Math.atan2(target.y - source.y, target.x - source.x),
     );
+    const favored = effectiveness === 'favored';
+    const trail = this.scene.add.graphics().setDepth(41);
+    trail.lineStyle(
+      favored ? 4 : 2,
+      color,
+      favored ? 0.62 : 0.3,
+    );
+    trail.lineBetween(source.x, source.y, target.x, target.y);
+    this.scene.tweens.add({
+      targets: trail,
+      alpha: 0,
+      duration: favored ? 190 : 120,
+      onComplete: () => trail.destroy(),
+    });
     const muzzle = this.scene.add
       .image(source.x, source.y, IMAGE_ASSETS.muzzleFlash)
       .setDepth(42)
       .setTint(color)
       .setAngle(angle)
-      .setDisplaySize(style === 'mortar' ? 34 : 25, style === 'mortar' ? 34 : 25);
+      .setDisplaySize(
+        style === 'mortar' ? 36 : favored ? 31 : 25,
+        style === 'mortar' ? 36 : favored ? 31 : 25,
+      );
     this.scene.tweens.add({
       targets: muzzle,
       alpha: 0,
@@ -84,17 +122,35 @@ export class BattlefieldEffects {
       .image(source.x, source.y, IMAGE_ASSETS.impactSpark)
       .setDepth(43)
       .setTint(color)
-      .setDisplaySize(style === 'mortar' ? 16 : 10, style === 'mortar' ? 16 : 10);
+      .setDisplaySize(
+        style === 'mortar' ? 19 : style === 'piercer' ? 22 : favored ? 14 : 10,
+        style === 'piercer' ? 7 : style === 'mortar' ? 19 : favored ? 14 : 10,
+      )
+      .setAngle(style === 'piercer' ? angle : 0);
+    const flight = { progress: 0 };
     this.scene.tweens.add({
-      targets: projectile,
-      x: target.x,
-      y: target.y,
-      angle: 180,
-      duration: style === 'mortar' ? 180 : 95,
-      ease: 'Sine.easeIn',
+      targets: flight,
+      progress: 1,
+      duration: style === 'mortar' ? 260 : style === 'piercer' ? 115 : 95,
+      ease: style === 'mortar' ? 'Sine.easeInOut' : 'Sine.easeIn',
+      onUpdate: () => {
+        const arc =
+          style === 'mortar' ? Math.sin(Math.PI * flight.progress) * 58 : 0;
+        projectile.setPosition(
+          Phaser.Math.Linear(source.x, target.x, flight.progress),
+          Phaser.Math.Linear(source.y, target.y, flight.progress) - arc,
+        );
+        if (style !== 'piercer') projectile.setAngle(180 * flight.progress);
+      },
       onComplete: () => {
         projectile.destroy();
-        this.playImpact(target, color, style === 'mortar');
+        this.playImpact(
+          target,
+          color,
+          style === 'mortar',
+          effectiveness,
+        );
+        this.playFavoredCallout(targetPosition, damage, effectiveness);
       },
     });
   }
@@ -103,21 +159,50 @@ export class BattlefieldEffects {
     point: Phaser.Math.Vector2,
     color: number,
     heavy: boolean,
+    effectiveness: CombatHitEffectiveness,
   ): void {
+    const favored = effectiveness === 'favored';
     const spark = this.scene.add
       .image(point.x, point.y, IMAGE_ASSETS.impactSpark)
       .setDepth(44)
       .setTint(color)
-      .setDisplaySize(heavy ? 42 : 28, heavy ? 42 : 28);
+      .setDisplaySize(heavy ? 42 : favored ? 38 : 28, heavy ? 42 : favored ? 38 : 28);
+    const ring = this.scene.add
+      .circle(point.x, point.y, favored ? 19 : 12)
+      .setStrokeStyle(favored ? 4 : 2, favored ? 0xfff0a8 : color, 0.95)
+      .setDepth(43);
     this.scene.tweens.add({
       targets: spark,
-      displayWidth: heavy ? 66 : 45,
-      displayHeight: heavy ? 66 : 45,
+      displayWidth: heavy ? 66 : favored ? 60 : 45,
+      displayHeight: heavy ? 66 : favored ? 60 : 45,
       alpha: 0,
       angle: 100,
       duration: heavy ? 260 : 170,
       onComplete: () => spark.destroy(),
     });
+    this.scene.tweens.add({
+      targets: ring,
+      scaleX: favored ? 2.1 : 1.65,
+      scaleY: favored ? 2.1 : 1.65,
+      alpha: 0,
+      duration: favored ? 230 : 150,
+      ease: 'Quad.easeOut',
+      onComplete: () => ring.destroy(),
+    });
+    if (favored) this.scene.cameras.main.shake(75, 0.0012);
+  }
+
+  private playFavoredCallout(
+    position: CombatPoint,
+    damage: number,
+    effectiveness: CombatHitEffectiveness,
+  ): void {
+    if (effectiveness !== 'favored') return;
+    const key = `${Math.round(position.column * 2)}:${Math.round(position.row * 2)}`;
+    const now = this.scene.time.now;
+    if (now - (this.lastFavoredCalloutAt.get(key) ?? -1_000) < 360) return;
+    this.lastFavoredCalloutAt.set(key, now);
+    this.playCallout(position, `약점! -${Math.max(1, Math.round(damage))}`, '#fff0a8');
   }
 
   private playDestruction(position: CombatPoint, heavy: boolean): void {
@@ -170,6 +255,33 @@ export class BattlefieldEffects {
       onComplete: () => burst.destroy(),
     });
     this.scene.cameras.main.shake(120, 0.0025);
+  }
+
+  private playCallout(
+    position: CombatPoint,
+    message: string,
+    color: string,
+  ): void {
+    const point = this.toWorld(position);
+    const label = this.scene.add
+      .text(point.x, point.y - 20, message, {
+        backgroundColor: '#171321cc',
+        color,
+        fontFamily: 'Arial, sans-serif',
+        fontSize: '14px',
+        fontStyle: 'bold',
+        padding: { x: 6, y: 3 },
+      })
+      .setOrigin(0.5)
+      .setDepth(48);
+    this.scene.tweens.add({
+      targets: label,
+      y: point.y - 48,
+      alpha: 0,
+      duration: 680,
+      ease: 'Quad.easeOut',
+      onComplete: () => label.destroy(),
+    });
   }
 
   private toWorld(position: CombatPoint): Phaser.Math.Vector2 {

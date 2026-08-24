@@ -1,6 +1,8 @@
 import type Phaser from 'phaser';
 import type { BattlefieldAudioDirector } from '../audio/BattlefieldAudioDirector';
+import { IMAGE_ASSETS } from '../assets/GameAssets';
 import { TextButton } from './TextButton';
+import { TOY_UI } from './ToyUiTheme';
 
 type DragTarget = 'music' | 'effects' | null;
 
@@ -23,19 +25,24 @@ export class AudioControlPanel {
   ) {
     this.toggleButton = new TextButton(
       scene,
-      916,
+      930,
       50,
-      132,
+      88,
       38,
-      '소리 설정',
+      '♪ 소리',
       () => this.toggle(),
     );
     this.toggleButton.setDepth(145);
 
-    const background = scene.add
-      .rectangle(0, 0, 350, 210, 0x262238, 0.98)
+    const paper = scene.add
+      .image(0, 0, IMAGE_ASSETS.paperTexture)
       .setOrigin(0)
-      .setStrokeStyle(2, 0x9fe3c3, 0.95)
+      .setDisplaySize(350, 210)
+      .setAlpha(0.99);
+    const background = scene.add
+      .rectangle(0, 0, 350, 210, TOY_UI.paper, 0.1)
+      .setOrigin(0)
+      .setStrokeStyle(3, TOY_UI.teal, 0.95)
       .setInteractive();
     background.on(
       'pointerdown',
@@ -47,8 +54,8 @@ export class AudioControlPanel {
       ) => event.stopPropagation(),
     );
     const title = scene.add.text(18, 15, '소리 설정', {
-      color: '#ffd166',
-      fontFamily: 'Arial, sans-serif',
+      color: '#0b615a',
+      fontFamily: TOY_UI.fontFamily,
       fontSize: '20px',
       fontStyle: 'bold',
     });
@@ -81,6 +88,7 @@ export class AudioControlPanel {
     );
     this.panel = scene.add
       .container(630, 92, [
+        paper,
         background,
         title,
         closeButton.gameObject,
@@ -104,7 +112,7 @@ export class AudioControlPanel {
     this.open = false;
     this.dragTarget = null;
     this.panel.setVisible(false);
-    this.toggleButton.setLabel('소리 설정');
+    this.toggleButton.setLabel('♪ 소리');
   }
 
   public refresh(): void {
@@ -115,7 +123,7 @@ export class AudioControlPanel {
     this.audio.startMusic();
     this.open = !this.open;
     this.panel.setVisible(this.open);
-    this.toggleButton.setLabel(this.open ? '소리 닫기' : '소리 설정');
+    this.toggleButton.setLabel(this.open ? '× 닫기' : '♪ 소리');
     this.sync();
   }
 
@@ -131,7 +139,7 @@ export class AudioControlPanel {
         y,
         width,
         8,
-        0x6a6285,
+        0xc7af82,
         1,
       )
       .setInteractive({ useHandCursor: true });
@@ -156,8 +164,8 @@ export class AudioControlPanel {
     target: Exclude<DragTarget, null>,
   ): Phaser.GameObjects.Arc {
     const knob = this.scene.add
-      .circle(AudioControlPanel.TRACK_START_X, y, 10, 0xffd166, 1)
-      .setStrokeStyle(2, 0x171321, 1)
+      .circle(AudioControlPanel.TRACK_START_X, y, 10, TOY_UI.coral, 1)
+      .setStrokeStyle(2, TOY_UI.coralDark, 1)
       .setInteractive({ useHandCursor: true });
     knob.on(
       'pointerdown',
@@ -213,8 +221,8 @@ export class AudioControlPanel {
 
   private labelStyle(): Phaser.Types.GameObjects.Text.TextStyle {
     return {
-      color: '#f8f4e8',
-      fontFamily: 'Arial, sans-serif',
+      color: TOY_UI.ink,
+      fontFamily: TOY_UI.fontFamily,
       fontSize: '16px',
     };
   }

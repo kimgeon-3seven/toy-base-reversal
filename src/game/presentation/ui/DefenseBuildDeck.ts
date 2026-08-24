@@ -5,6 +5,7 @@ import { GAME_COLORS } from '../../config/GameConfig';
 import { TOWER_CONSTRUCTION_COSTS } from '../../config/ConstructionEconomyConfig';
 import { TOWER_NAMES } from '../../config/ContentConfig';
 import { TextButton } from './TextButton';
+import { TOY_UI, ToyUiFactory } from './ToyUiTheme';
 
 export interface DefenseBuildDeckModel {
   readonly activeKind: StructureKind;
@@ -28,6 +29,11 @@ export interface DefenseBuildDeckActions {
 }
 
 const TOWERS: readonly TowerArchetype[] = ['popgun', 'mortar', 'piercer'];
+const TOWER_MARKS: Readonly<Record<TowerArchetype, string>> = {
+  popgun: '●',
+  mortar: '◉',
+  piercer: '➤',
+};
 
 export class DefenseBuildDeck {
   private readonly container: Phaser.GameObjects.Container;
@@ -42,13 +48,20 @@ export class DefenseBuildDeck {
     scene: Phaser.Scene,
     actions: DefenseBuildDeckActions,
   ) {
-    const panel = scene.add
-      .rectangle(0, 0, 960, 68, 0x171321, 0.97)
-      .setOrigin(0)
-      .setStrokeStyle(2, 0x554b78, 0.95);
-    this.summary = scene.add.text(12, 50, '', {
-      color: GAME_COLORS.secondary,
-      fontFamily: 'Arial, sans-serif',
+    const ui = new ToyUiFactory(scene);
+    const panel = ui.createPaperPanel(960, 82, {
+      accent: TOY_UI.coral,
+      tape: false,
+    });
+    const title = scene.add.text(16, 8, '설계 도구', {
+      color: TOY_UI.coralDark === 0x9d332e ? '#9d332e' : GAME_COLORS.primary,
+      fontFamily: TOY_UI.fontFamily,
+      fontSize: '13px',
+      fontStyle: 'bold',
+    });
+    this.summary = scene.add.text(122, 8, '', {
+      color: TOY_UI.mutedInk,
+      fontFamily: TOY_UI.fontFamily,
       fontSize: '13px',
       fontStyle: 'bold',
     });
@@ -58,10 +71,10 @@ export class DefenseBuildDeck {
     TOWERS.forEach((tower, index) => {
       const button = new TextButton(
         scene,
-        61 + index * 114,
-        27,
-        108,
-        42,
+        63 + index * 113,
+        49,
+        106,
+        50,
         '',
         () => actions.selectTower(tower),
       );
@@ -72,70 +85,70 @@ export class DefenseBuildDeck {
 
     this.obstacleButton = new TextButton(
       scene,
-      403,
-      27,
-      108,
-      42,
-      '[4] 블록 벽',
+      402,
+      49,
+      106,
+      50,
+      '▦  블록 벽\n[4]',
       actions.selectObstacle,
     );
     this.upgradeButton = new TextButton(
       scene,
-      486,
-      27,
+      492,
+      49,
+      60,
       50,
-      42,
       '강화\n[U]',
       actions.upgrade,
     );
     this.undoButton = new TextButton(
       scene,
-      542,
-      27,
+      558,
+      49,
+      54,
       50,
-      42,
       '취소\n↶',
       actions.undo,
     );
     this.redoButton = new TextButton(
       scene,
-      598,
-      27,
+      616,
+      49,
+      54,
       50,
-      42,
       '다시\n↷',
       actions.redo,
     );
     const saveButton = new TextButton(
       scene,
-      661,
-      27,
-      66,
-      42,
+      677,
+      49,
+      58,
+      50,
       '저장\n[S]',
       actions.save,
     );
     const resetButton = new TextButton(
       scene,
-      733,
-      27,
-      66,
-      42,
+      740,
+      49,
+      58,
+      50,
       '저장점\n복구',
       actions.reset,
     );
     const startButton = new TextButton(
       scene,
-      856,
-      27,
-      170,
-      42,
-      '방어 시작  [Space]',
+      875,
+      49,
+      160,
+      50,
+      '▶ 방어 시작\n[Space]',
       actions.start,
       {
-        fill: 0x70501d,
-        hover: 0x9b7028,
-        stroke: 0xffd166,
+        fill: TOY_UI.coral,
+        hover: 0xf47768,
+        stroke: TOY_UI.coralDark,
         text: '#fff7df',
       },
     );
@@ -149,8 +162,9 @@ export class DefenseBuildDeck {
       resetButton,
       startButton,
     );
-    this.container = scene.add.container(32, 707, [
-      panel,
+    this.container = scene.add.container(32, 693, [
+      ...panel,
+      title,
       ...buttons.map((button) => button.gameObject),
       this.summary,
     ]);
@@ -163,8 +177,8 @@ export class DefenseBuildDeck {
       const available = model.availableTowers.includes(tower);
       button?.setLabel(
         available
-          ? `${TOWER_NAMES[tower]}\n${TOWER_CONSTRUCTION_COSTS[tower]} 부품`
-          : `${TOWER_NAMES[tower]}\n잠김`,
+          ? `${TOWER_MARKS[tower]}  ${TOWER_NAMES[tower]}\n${TOWER_CONSTRUCTION_COSTS[tower]} 부품`
+          : `◇  ${TOWER_NAMES[tower]}\n잠김`,
       );
       button?.setEnabled(available);
       button?.setSelected(
@@ -175,7 +189,7 @@ export class DefenseBuildDeck {
     this.upgradeButton.setEnabled(model.canUpgrade);
     this.undoButton.setEnabled(model.canUndo);
     this.redoButton.setEnabled(model.canRedo);
-    this.summary.setText(`보유 ${model.funds} 부품 · 우클릭 판매는 전액 환급`);
+    this.summary.setText(`◆ ${model.funds} 부품  ·  우클릭 판매 100% 환급`);
   }
 
   public setVisible(visible: boolean): void {

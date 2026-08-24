@@ -57,7 +57,7 @@ export class PhaserGameRuntime implements GameRuntime {
       parent: this.parentId,
       width: GAME_WIDTH,
       height: GAME_HEIGHT,
-      backgroundColor: '#15131e',
+      backgroundColor: '#122b28',
       render: {
         antialias: true,
         pixelArt: false,

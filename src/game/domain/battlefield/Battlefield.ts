@@ -3,6 +3,7 @@ import type { GridPosition } from '../grid/GridPosition';
 import type { Pathfinder } from '../pathfinding/Pathfinder';
 import { DefenseBlueprint } from './DefenseBlueprint';
 import type { BattlefieldResult } from './BattlefieldResult';
+import type { BattlefieldFailureReason } from './BattlefieldResult';
 import type { DefenseStructure } from '../structures/DefenseStructure';
 
 export class Battlefield {
@@ -18,17 +19,12 @@ export class Battlefield {
   }
 
   public place(structure: DefenseStructure): BattlefieldResult {
-    const positionFailure = this.validateTargetPosition(structure.position);
+    const positionFailure = this.previewPlacement(structure.position);
     if (positionFailure !== null) {
       return { success: false, reason: positionFailure };
     }
 
     this.structuresById.set(structure.id, structure);
-    if (!this.allEntryPointsHavePaths()) {
-      this.structuresById.delete(structure.id);
-      return { success: false, reason: 'path-blocked' };
-    }
-
     return { success: true, structure };
   }
 
@@ -38,22 +34,32 @@ export class Battlefield {
       return { success: false, reason: 'structure-not-found' };
     }
 
-    const originalPosition = structure.position;
-    this.structuresById.delete(structureId);
-    const positionFailure = this.validateTargetPosition(target);
-    this.structuresById.set(structureId, structure);
-
+    const positionFailure = this.previewPlacement(target, structureId);
     if (positionFailure !== null) {
       return { success: false, reason: positionFailure };
     }
 
     structure.moveTo(target);
-    if (!this.allEntryPointsHavePaths()) {
-      structure.moveTo(originalPosition);
-      return { success: false, reason: 'path-blocked' };
-    }
-
     return { success: true, structure };
+  }
+
+  public previewPlacement(
+    position: GridPosition,
+    movingStructureId: string | null = null,
+  ): Exclude<BattlefieldFailureReason, 'structure-not-found'> | null {
+    const positionFailure = this.validateTargetPosition(
+      position,
+      movingStructureId,
+    );
+    if (positionFailure !== null) return positionFailure;
+
+    const blockedKeys = this.blockedPositionKeys(movingStructureId);
+    blockedKeys.add(position.key);
+    const hasEveryPath = this.map.entryPoints.every(
+      (entryPoint) =>
+        this.pathfinder.findPath(this.map, entryPoint, blockedKeys) !== null,
+    );
+    return hasEveryPath ? null : 'path-blocked';
   }
 
   public sell(structureId: string): BattlefieldResult {
@@ -139,6 +145,7 @@ export class Battlefield {
 
   private validateTargetPosition(
     position: GridPosition,
+    movingStructureId: string | null = null,
   ): 'outside-map' | 'reserved-cell' | 'occupied-cell' | null {
     if (!this.map.contains(position)) {
       return 'outside-map';
@@ -148,7 +155,8 @@ export class Battlefield {
       return 'reserved-cell';
     }
 
-    if (this.findStructureAt(position) !== null) {
+    const occupant = this.findStructureAt(position);
+    if (occupant !== null && occupant.id !== movingStructureId) {
       return 'occupied-cell';
     }
 
@@ -163,9 +171,13 @@ export class Battlefield {
     );
   }
 
-  private blockedPositionKeys(): ReadonlySet<string> {
+  private blockedPositionKeys(
+    ignoredStructureId: string | null = null,
+  ): Set<string> {
     return new Set(
-      this.structures.map((structure) => structure.position.key),
+      this.structures
+        .filter((structure) => structure.id !== ignoredStructureId)
+        .map((structure) => structure.position.key),
     );
   }
 }
