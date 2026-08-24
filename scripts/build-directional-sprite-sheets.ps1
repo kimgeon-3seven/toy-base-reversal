@@ -289,6 +289,26 @@ function Draw-NormalizedFrame(
   )
 }
 
+function Get-SharedVisibleBounds([object[]]$preparedFrames) {
+  if ($preparedFrames.Count -eq 0) {
+    throw 'Cannot calculate shared bounds without prepared frames.'
+  }
+
+  $left = [int]::MaxValue
+  $top = [int]::MaxValue
+  $right = [int]::MinValue
+  $bottom = [int]::MinValue
+  foreach ($preparedFrame in $preparedFrames) {
+    $bounds = $preparedFrame.VisibleBounds
+    $left = [Math]::Min($left, $bounds.Left)
+    $top = [Math]::Min($top, $bounds.Top)
+    $right = [Math]::Max($right, $bounds.Right)
+    $bottom = [Math]::Max($bottom, $bounds.Bottom)
+  }
+
+  return [System.Drawing.Rectangle]::FromLTRB($left, $top, $right, $bottom)
+}
+
 $walkSheet = New-TransparentBitmap $sheetWidth $sheetHeight
 $attackSheet = New-TransparentBitmap $sheetWidth $sheetHeight
 $walkGraphics = [System.Drawing.Graphics]::FromImage($walkSheet)
@@ -312,6 +332,7 @@ try {
     }
 
     $source = [System.Drawing.Bitmap]::new($sourcePath)
+    $preparedFrames = @()
     try {
       for ($animationRow = 0; $animationRow -lt 2; $animationRow += 1) {
         for ($frameIndex = 0; $frameIndex -lt 4; $frameIndex += 1) {
@@ -326,28 +347,41 @@ try {
             $bottom
           )
           $frame = Remove-ChromaBackground $source $sourceBounds
-          try {
-            $minimumComponentPixels = [Math]::Max(
-              1200,
-              [int][Math]::Round($frame.Width * $frame.Height * 0.03)
-            )
-            [SpriteComponentCleaner]::RemoveSmallComponents(
-              $frame,
-              $minimumComponentPixels
-            )
-            $visibleBounds = Find-VisibleBounds $frame
-            $targetGraphics = if ($animationRow -eq 0) {
-              $walkGraphics
-            } else {
-              $attackGraphics
-            }
-            Draw-NormalizedFrame $targetGraphics $frame $visibleBounds $frameIndex $directionIndex
-          } finally {
-            $frame.Dispose()
+          $minimumComponentPixels = [Math]::Max(
+            1200,
+            [int][Math]::Round($frame.Width * $frame.Height * 0.03)
+          )
+          [SpriteComponentCleaner]::RemoveSmallComponents(
+            $frame,
+            $minimumComponentPixels
+          )
+          $preparedFrames += [PSCustomObject]@{
+            Frame = $frame
+            VisibleBounds = Find-VisibleBounds $frame
+            AnimationRow = $animationRow
+            FrameIndex = $frameIndex
           }
         }
       }
+
+      for ($animationRow = 0; $animationRow -lt 2; $animationRow += 1) {
+        $animationFrames = @(
+          $preparedFrames | Where-Object { $_.AnimationRow -eq $animationRow }
+        )
+        $sharedBounds = Get-SharedVisibleBounds $animationFrames
+        $targetGraphics = if ($animationRow -eq 0) {
+          $walkGraphics
+        } else {
+          $attackGraphics
+        }
+        foreach ($preparedFrame in $animationFrames) {
+          Draw-NormalizedFrame $targetGraphics $preparedFrame.Frame $sharedBounds $preparedFrame.FrameIndex $directionIndex
+        }
+      }
     } finally {
+      foreach ($preparedFrame in $preparedFrames) {
+        $preparedFrame.Frame.Dispose()
+      }
       $source.Dispose()
     }
   }

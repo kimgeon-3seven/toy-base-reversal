@@ -156,7 +156,6 @@ export class BattlefieldSpriteRenderer {
         initialFacingDegrees: 0,
         facingMode: 'eight-way',
         enableMovementBob: true,
-        animationProfile: this.animationCatalog.profileFor(texture),
       };
     });
     this.sync(this.defenders, descriptors);
@@ -180,12 +179,12 @@ export class BattlefieldSpriteRenderer {
           unit.kind === 'tank' ? 68 : unit.kind === 'ranger' ? 62 : 56,
         depth: 16,
         baseColor: 0x159b8c,
-        tint: 0x79e5d8,
+        tint: unit.kind === 'tank' ? undefined : 0x79e5d8,
         naturalFacingDegrees: this.facingProfile.naturalFacingDegrees(texture),
         initialFacingDegrees: 0,
         facingMode: 'eight-way',
         enableMovementBob: true,
-        animationProfile: this.animationCatalog.profileFor(texture),
+        animationProfile: this.animationCatalog.profileForAttackUnit(unit.kind),
       };
     });
     this.sync(this.attackers, descriptors);

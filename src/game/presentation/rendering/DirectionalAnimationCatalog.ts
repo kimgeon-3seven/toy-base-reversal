@@ -1,4 +1,5 @@
 import type Phaser from 'phaser';
+import type { AttackUnitKind } from '../../domain/attack/SquadPlan';
 import { IMAGE_ASSETS } from '../assets/GameAssets';
 import type { SpriteAnimationAction } from './SpriteAnimationStateMachine';
 
@@ -36,8 +37,10 @@ const SHIELD_PROFILE: DirectionalAnimationProfile = {
 };
 
 export class DirectionalAnimationCatalog {
-  public profileFor(texture: string): DirectionalAnimationProfile | null {
-    return texture === IMAGE_ASSETS.attackerTank ? SHIELD_PROFILE : null;
+  public profileForAttackUnit(
+    unitKind: AttackUnitKind,
+  ): DirectionalAnimationProfile | null {
+    return unitKind === 'tank' ? SHIELD_PROFILE : null;
   }
 
   public directionForDegrees(degrees: number): SpriteDirection {

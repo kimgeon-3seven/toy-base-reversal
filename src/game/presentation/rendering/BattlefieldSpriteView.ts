@@ -9,6 +9,8 @@ import { SpriteAnimationStateMachine } from './SpriteAnimationStateMachine';
 
 export type SpriteFacingMode = 'static' | 'eight-way' | 'free';
 
+const WALK_GRACE_DURATION_MS = 140;
+
 export interface BattlefieldSpriteState {
   readonly texture: string;
   readonly x: number;
@@ -46,6 +48,7 @@ export class BattlefieldSpriteView {
   private hitFlashUntilMs = 0;
   private hitReactionUntilMs = 0;
   private hitReactionStrength = 0;
+  private currentAnimationKey: string | null = null;
   private readonly motionPhase: number;
 
   public constructor(
@@ -140,10 +143,14 @@ export class BattlefieldSpriteView {
       .setAlpha(alpha)
       .setVisible(state.baseColor !== undefined);
     const animationProfile = state.animationProfile ?? null;
-    const action = this.animationState.resolve(now, isMoving);
+    if (isMoving) {
+      this.animationState.observeMovement(now, WALK_GRACE_DURATION_MS);
+    }
+    const action = this.animationState.resolve(now);
     if (animationProfile === null) {
       this.image.anims.stop();
       this.image.setTexture(state.texture);
+      this.currentAnimationKey = null;
     } else {
       const direction = this.animationCatalog.directionForDegrees(
         this.worldFacingDegrees,
@@ -154,13 +161,17 @@ export class BattlefieldSpriteView {
           animationProfile.walkTexture,
           this.animationCatalog.idleFrame(direction),
         );
+        this.currentAnimationKey = null;
       } else {
         const animationKey = this.animationCatalog.animationKey(
           animationProfile,
           action,
           direction,
         );
-        this.image.play(animationKey, true);
+        if (this.currentAnimationKey !== animationKey) {
+          this.image.play(animationKey);
+          this.currentAnimationKey = animationKey;
+        }
       }
     }
 
