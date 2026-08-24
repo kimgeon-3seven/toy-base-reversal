@@ -42,6 +42,10 @@ export class AttackUnit {
     return this.currentHealth / this.stats.maxHealth;
   }
 
+  public get isMoving(): boolean {
+    return this.nextPosition !== null;
+  }
+
   public get renderColumn(): number {
     return this.interpolate(this.currentPosition.column, this.nextPosition?.column);
   }

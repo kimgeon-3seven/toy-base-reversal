@@ -439,6 +439,7 @@ export class AttackCombat {
       this.pendingEvents.push({
         type: 'attack',
         style: towerArchetype,
+        sourceId: tower.id,
         source: {
           column: tower.position.column,
           row: tower.position.row,
@@ -479,6 +480,7 @@ export class AttackCombat {
           this.pendingEvents.push({
             type: 'attack',
             style: 'unit',
+            sourceId: unit.id,
             source: {
               column: unit.renderColumn,
               row: unit.renderRow,
@@ -517,6 +519,7 @@ export class AttackCombat {
           this.pendingEvents.push({
             type: 'attack',
             style: 'unit',
+            sourceId: unit.id,
             source: {
               column: unit.renderColumn,
               row: unit.renderRow,
@@ -585,6 +588,7 @@ export class AttackCombat {
         this.pendingEvents.push({
           type: 'attack',
           style: 'unit',
+          sourceId: unit.id,
           source: {
             column: unit.renderColumn,
             row: unit.renderRow,
@@ -629,6 +633,7 @@ export class AttackCombat {
       this.pendingEvents.push({
         type: 'attack',
         style: 'commander',
+        sourceId: 'commander',
         source: {
           column: this.commander.position.column,
           row: this.commander.position.row,
@@ -660,6 +665,7 @@ export class AttackCombat {
       this.pendingEvents.push({
         type: 'attack',
         style: 'commander',
+        sourceId: 'commander',
         source: {
           column: this.commander.position.column,
           row: this.commander.position.row,

@@ -263,15 +263,12 @@ function Draw-NormalizedFrame(
   [System.Drawing.Graphics]$graphics,
   [System.Drawing.Bitmap]$frame,
   [System.Drawing.Rectangle]$visibleBounds,
+  [double]$sharedScale,
   [int]$targetColumn,
   [int]$targetRow
 ) {
-  $scale = [Math]::Min(
-    $contentWidth / $visibleBounds.Width,
-    $contentHeight / $visibleBounds.Height
-  )
-  $targetWidth = [int][Math]::Round($visibleBounds.Width * $scale)
-  $targetHeight = [int][Math]::Round($visibleBounds.Height * $scale)
+  $targetWidth = [int][Math]::Round($visibleBounds.Width * $sharedScale)
+  $targetHeight = [int][Math]::Round($visibleBounds.Height * $sharedScale)
   $targetX = $targetColumn * $cellSize + [int][Math]::Round(($cellSize - $targetWidth) / 2)
   $targetY = $targetRow * $cellSize + $baselineY - $targetHeight
   $targetBounds = [System.Drawing.Rectangle]::new(
@@ -289,24 +286,23 @@ function Draw-NormalizedFrame(
   )
 }
 
-function Get-SharedVisibleBounds([object[]]$preparedFrames) {
+function Get-SharedFrameScale([object[]]$preparedFrames) {
   if ($preparedFrames.Count -eq 0) {
-    throw 'Cannot calculate shared bounds without prepared frames.'
+    throw 'Cannot calculate a shared scale without prepared frames.'
   }
 
-  $left = [int]::MaxValue
-  $top = [int]::MaxValue
-  $right = [int]::MinValue
-  $bottom = [int]::MinValue
+  $maximumWidth = 0
+  $maximumHeight = 0
   foreach ($preparedFrame in $preparedFrames) {
     $bounds = $preparedFrame.VisibleBounds
-    $left = [Math]::Min($left, $bounds.Left)
-    $top = [Math]::Min($top, $bounds.Top)
-    $right = [Math]::Max($right, $bounds.Right)
-    $bottom = [Math]::Max($bottom, $bounds.Bottom)
+    $maximumWidth = [Math]::Max($maximumWidth, $bounds.Width)
+    $maximumHeight = [Math]::Max($maximumHeight, $bounds.Height)
   }
 
-  return [System.Drawing.Rectangle]::FromLTRB($left, $top, $right, $bottom)
+  return [Math]::Min(
+    $contentWidth / $maximumWidth,
+    $contentHeight / $maximumHeight
+  )
 }
 
 $walkSheet = New-TransparentBitmap $sheetWidth $sheetHeight
@@ -368,14 +364,14 @@ try {
         $animationFrames = @(
           $preparedFrames | Where-Object { $_.AnimationRow -eq $animationRow }
         )
-        $sharedBounds = Get-SharedVisibleBounds $animationFrames
+        $sharedScale = Get-SharedFrameScale $animationFrames
         $targetGraphics = if ($animationRow -eq 0) {
           $walkGraphics
         } else {
           $attackGraphics
         }
         foreach ($preparedFrame in $animationFrames) {
-          Draw-NormalizedFrame $targetGraphics $preparedFrame.Frame $sharedBounds $preparedFrame.FrameIndex $directionIndex
+          Draw-NormalizedFrame $targetGraphics $preparedFrame.Frame $preparedFrame.VisibleBounds $sharedScale $preparedFrame.FrameIndex $directionIndex
         }
       }
     } finally {

@@ -151,11 +151,15 @@ export class BattlefieldSpriteRenderer {
               : 56,
         depth: 15,
         baseColor: 0xe95e4f,
-        tint: 0xff8b82,
+        tint: enemy.stats.archetype === 'tank' ? undefined : 0xff8b82,
         naturalFacingDegrees: this.facingProfile.naturalFacingDegrees(texture),
         initialFacingDegrees: 0,
         facingMode: 'eight-way',
         enableMovementBob: true,
+        isMoving: enemy.isMoving,
+        animationProfile: this.animationCatalog.profileForUnit(
+          enemy.stats.archetype,
+        ),
       };
     });
     this.sync(this.defenders, descriptors);
@@ -184,7 +188,8 @@ export class BattlefieldSpriteRenderer {
         initialFacingDegrees: 0,
         facingMode: 'eight-way',
         enableMovementBob: true,
-        animationProfile: this.animationCatalog.profileForAttackUnit(unit.kind),
+        isMoving: unit.isMoving,
+        animationProfile: this.animationCatalog.profileForUnit(unit.kind),
       };
     });
     this.sync(this.attackers, descriptors);
@@ -287,13 +292,14 @@ export class BattlefieldSpriteRenderer {
       event.style === 'mortar' ||
       event.style === 'piercer'
     ) {
-      return this.nearestSpriteTo(event.source, this.structures.values());
+      return this.structures.get(event.sourceId) ?? null;
     }
     if (event.style === 'commander') return this.commander;
-    return this.nearestSpriteTo(event.source, [
-      ...this.defenders.values(),
-      ...this.attackers.values(),
-    ]);
+    return (
+      this.defenders.get(event.sourceId) ??
+      this.attackers.get(event.sourceId) ??
+      null
+    );
   }
 
   private nearestSpriteTo(

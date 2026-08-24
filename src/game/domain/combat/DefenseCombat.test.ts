@@ -224,6 +224,7 @@ describe('DefenseCombat', () => {
         expect.objectContaining({
           type: 'attack',
           style: 'popgun',
+          sourceId: 'tower',
           damage: expect.any(Number),
           effectiveness: expect.stringMatching(/normal|favored/),
         }),

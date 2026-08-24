@@ -61,7 +61,7 @@ export function preloadGameAssets(loader: Phaser.Loader.LoaderPlugin): void {
   loader.image(IMAGE_ASSETS.attackerTank, assetUrl(`${sprites}/unit-shield-v2.png`));
   loader.spritesheet(
     IMAGE_ASSETS.attackerTankWalk,
-    assetUrl(`${sprites}/unit-shield-walk-8way-v1.png`),
+    assetUrl(`${sprites}/unit-shield-walk-8way-v2.png`),
     { frameWidth: 160, frameHeight: 160 },
   );
   loader.spritesheet(

@@ -1,5 +1,5 @@
 import type Phaser from 'phaser';
-import type { AttackUnitKind } from '../../domain/attack/SquadPlan';
+import type { UnitArchetype } from '../../domain/combat/CombatArchetype';
 import { IMAGE_ASSETS } from '../assets/GameAssets';
 import type { SpriteAnimationAction } from './SpriteAnimationStateMachine';
 
@@ -37,10 +37,10 @@ const SHIELD_PROFILE: DirectionalAnimationProfile = {
 };
 
 export class DirectionalAnimationCatalog {
-  public profileForAttackUnit(
-    unitKind: AttackUnitKind,
+  public profileForUnit(
+    archetype: UnitArchetype,
   ): DirectionalAnimationProfile | null {
-    return unitKind === 'tank' ? SHIELD_PROFILE : null;
+    return archetype === 'tank' ? SHIELD_PROFILE : null;
   }
 
   public directionForDegrees(degrees: number): SpriteDirection {
@@ -98,11 +98,15 @@ export class DirectionalAnimationCatalog {
     const key = this.animationKey(profile, action, direction);
     if (scene.anims.exists(key)) return;
     const texture = action === 'walk' ? profile.walkTexture : profile.attackTexture;
+    const firstFrame = row * 4;
+    const frameNumbers =
+      action === 'walk'
+        ? [firstFrame, firstFrame + 1, firstFrame + 2, firstFrame + 1]
+        : [firstFrame, firstFrame + 1, firstFrame + 2, firstFrame + 3];
     scene.anims.create({
       key,
       frames: scene.anims.generateFrameNumbers(texture, {
-        start: row * 4,
-        end: row * 4 + 3,
+        frames: frameNumbers,
       }),
       frameRate,
       repeat,

@@ -55,6 +55,10 @@ export class DefenseEnemy {
     return this.currentHealth / this.stats.maxHealth;
   }
 
+  public get isMoving(): boolean {
+    return this.plannedNextPosition !== null;
+  }
+
   public get renderColumn(): number {
     if (this.plannedNextPosition === null) {
       return this.currentPosition.column;

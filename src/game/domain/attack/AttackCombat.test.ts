@@ -347,6 +347,7 @@ describe('AttackCombat', () => {
         expect.objectContaining({
           type: 'attack',
           style: 'unit',
+          sourceId: 'attacker-1',
           damage: expect.any(Number),
         }),
         expect.objectContaining({

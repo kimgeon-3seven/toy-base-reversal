@@ -16,6 +16,7 @@ export type CombatEvent =
   | {
       readonly type: 'attack';
       readonly style: CombatAttackStyle;
+      readonly sourceId: string;
       readonly source: CombatPoint;
       readonly target: CombatPoint;
       readonly damage: number;

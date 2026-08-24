@@ -9,7 +9,7 @@ import { SpriteAnimationStateMachine } from './SpriteAnimationStateMachine';
 
 export type SpriteFacingMode = 'static' | 'eight-way' | 'free';
 
-const WALK_GRACE_DURATION_MS = 140;
+const WALK_STOP_GRACE_DURATION_MS = 48;
 
 export interface BattlefieldSpriteState {
   readonly texture: string;
@@ -23,6 +23,7 @@ export interface BattlefieldSpriteState {
   readonly initialFacingDegrees: number;
   readonly facingMode: SpriteFacingMode;
   readonly enableMovementBob: boolean;
+  readonly isMoving?: boolean;
   readonly isDisrupted?: boolean;
   readonly baseColor?: number;
   readonly baseScale?: number;
@@ -85,14 +86,23 @@ export class BattlefieldSpriteView {
     const now = this.scene.time.now;
     const deltaX = state.x - this.previousX;
     const deltaY = state.y - this.previousY;
-    const isMoving = Math.hypot(deltaX, deltaY) > 0.001;
+    const positionChanged = Math.hypot(deltaX, deltaY) > 0.001;
+    const isMoving = state.isMoving ?? positionChanged;
+    const animationProfile = state.animationProfile ?? null;
+
+    this.animationState.setMoving(
+      isMoving,
+      now,
+      WALK_STOP_GRACE_DURATION_MS,
+    );
+    const action = this.animationState.resolve(now);
 
     if (state.facingMode === 'static') {
       this.worldFacingDegrees = state.initialFacingDegrees;
     }
 
     if (
-      isMoving &&
+      positionChanged &&
       state.facingMode !== 'static' &&
       now >= this.attackFacingUntilMs
     ) {
@@ -114,7 +124,7 @@ export class BattlefieldSpriteView {
     );
 
     const bob =
-      isMoving && state.enableMovementBob
+      isMoving && state.enableMovementBob && animationProfile === null
         ? Math.sin(now * 0.018 + this.motionPhase) * 1.7
         : 0;
     const disruptionWobble = state.isDisrupted
@@ -142,11 +152,6 @@ export class BattlefieldSpriteView {
       .setDepth(state.depth - 0.5)
       .setAlpha(alpha)
       .setVisible(state.baseColor !== undefined);
-    const animationProfile = state.animationProfile ?? null;
-    if (isMoving) {
-      this.animationState.observeMovement(now, WALK_GRACE_DURATION_MS);
-    }
-    const action = this.animationState.resolve(now);
     if (animationProfile === null) {
       this.image.anims.stop();
       this.image.setTexture(state.texture);
@@ -217,6 +222,7 @@ export class BattlefieldSpriteView {
 
     this.attackFacingUntilMs = this.scene.time.now + 220;
     this.animationState.beginAttack(this.scene.time.now, 340);
+    this.currentAnimationKey = null;
     this.recoilUntilMs = this.scene.time.now + 120;
     this.recoilX = (-deltaX / length) * 4;
     this.recoilY = (-deltaY / length) * 4;

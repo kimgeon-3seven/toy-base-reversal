@@ -198,6 +198,7 @@ export class DefenseCombat {
       this.pendingEvents.push({
         type: 'attack',
         style: towerArchetype,
+        sourceId: tower.id,
         source: {
           column: tower.position.column,
           row: tower.position.row,
@@ -282,6 +283,7 @@ export class DefenseCombat {
     this.pendingEvents.push({
       type: 'attack',
       style: 'unit',
+      sourceId: enemy.id,
       source: {
         column: enemy.renderColumn,
         row: enemy.renderRow,
