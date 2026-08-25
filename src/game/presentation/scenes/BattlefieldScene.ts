@@ -89,6 +89,8 @@ import { RoundFlowHeader, type RoundFlowStep } from '../ui/RoundFlowHeader';
 import { MissionPanel, type MissionPanelModel } from '../ui/MissionPanel';
 import { RoundResultOverlay } from '../ui/RoundResultOverlay';
 import { BattleFeedbackAdvisor } from '../models/BattleFeedbackAdvice';
+import { CoreLoopFeedbackPresenter } from '../models/CoreLoopFeedbackPresentation';
+import { AttackCombatFeedbackPolicy } from '../models/AttackCombatFeedbackPolicy';
 import { IMAGE_ASSETS } from '../assets/GameAssets';
 import { CommanderAbilityPanel } from '../ui/CommanderAbilityPanel';
 import { TOY_UI } from '../ui/ToyUiTheme';
@@ -109,6 +111,13 @@ import {
 } from '../ui/BattlefieldPhaseUiPolicy';
 
 const PATH_COLORS = [0x59c3c3, 0xff8c61, 0x8bd17c] as const;
+
+interface AttackFeedbackBeforeUpdate {
+  readonly coreRatio: number;
+  readonly focusTargetId: string | null;
+  readonly focusTargetName: string;
+  readonly focusTargetPosition: GridPosition | null;
+}
 
 export class BattlefieldScene extends Phaser.Scene {
   private editor!: DefenseEditor;
@@ -174,6 +183,8 @@ export class BattlefieldScene extends Phaser.Scene {
   private hoveredGridPosition: GridPosition | null = null;
   private readonly defenseRewardPresenter = new DefenseRewardPresenter();
   private readonly feedbackAdvisor = new BattleFeedbackAdvisor();
+  private readonly coreLoopFeedbackPresenter = new CoreLoopFeedbackPresenter();
+  private readonly attackCombatFeedbackPolicy = new AttackCombatFeedbackPolicy();
   private readonly phaseUiPolicy = new BattlefieldPhaseUiPolicy();
   private commanderMoveKeys!: {
     up: Phaser.Input.Keyboard.Key;
@@ -318,8 +329,10 @@ export class BattlefieldScene extends Phaser.Scene {
 
     if (this.phase === 'attack-combat' && this.attackCombat !== null) {
       this.handleCommanderMovement();
+      const feedbackBeforeUpdate = this.attackFeedbackBeforeUpdate();
       this.attackCombat.update(delta);
       this.presentCombatEvents(this.attackCombat.drainEvents());
+      this.presentAttackCombatFeedback(feedbackBeforeUpdate);
       this.renderBattlefield();
       this.updatePhaseInterface();
       if (this.attackCombat.state !== 'running') {
@@ -768,6 +781,7 @@ export class BattlefieldScene extends Phaser.Scene {
       throw new Error('Role reversal requires a completed defense result.');
     }
     const reward = this.defenseRewardPresenter.present(defenseResult);
+    const loopFeedback = this.coreLoopFeedbackPresenter.presentDefense(defenseResult);
     this.editor.restoreBlueprint();
     this.combat = null;
     this.phase = 'role-reversal';
@@ -776,10 +790,11 @@ export class BattlefieldScene extends Phaser.Scene {
     this.tutorialOverlay.setVisible(false);
     this.resultOverlay.show({
       eyebrow: '역할 반전 · 같은 설계, 반대 역할',
-      title: '이제 네가 공격자다',
-      metrics: ['방금 지킨 장난감 요새가 공략 대상이 됩니다.'],
-      reward: `${reward.headline}\n${reward.breakdown}`,
-      advice: '획득한 포인트로 부대를 만들고 지휘관을 살려 적 코어를 파괴하세요.',
+      title: '내 방어선 → 내 공략 대상',
+      metrics: ['방금 지킨 설계를 최대 체력으로 복원했습니다.'],
+      progress: loopFeedback.progress,
+      reward: `${loopFeedback.bridgeMessage}\n${reward.breakdown}`,
+      advice: '같은 타워 배치를 분석해 부대를 편성하고 적 코어를 파괴하세요.',
       primaryAction: '[Enter] 바로 공격 준비',
       secondaryAction: '잠시 후 자동으로 진행됩니다.',
       tone: 'transition',
@@ -2106,6 +2121,79 @@ export class BattlefieldScene extends Phaser.Scene {
     this.audioDirector.present(events);
   }
 
+  private attackFeedbackBeforeUpdate(): AttackFeedbackBeforeUpdate {
+    if (this.attackCombat === null) {
+      return {
+        coreRatio: 1,
+        focusTargetId: null,
+        focusTargetName: '타워',
+        focusTargetPosition: null,
+      };
+    }
+    const focusTarget = this.editor.battlefield.structures.find(
+      (structure) => structure.id === this.attackCombat?.focusTargetId,
+    );
+    return {
+      coreRatio: this.attackCombat.coreHealthRatio,
+      focusTargetId: this.attackCombat.focusTargetId,
+      focusTargetName:
+        focusTarget?.towerArchetype === null || focusTarget === undefined
+          ? '타워'
+          : TOWER_NAMES[focusTarget.towerArchetype],
+      focusTargetPosition:
+        focusTarget === undefined
+          ? null
+          : new GridPosition(
+              focusTarget.position.column,
+              focusTarget.position.row,
+            ),
+    };
+  }
+
+  private presentAttackCombatFeedback(
+    before: AttackFeedbackBeforeUpdate,
+  ): void {
+    if (this.attackCombat === null) return;
+    const focusTargetStillExists =
+      before.focusTargetId !== null &&
+      this.editor.battlefield.structures.some(
+        (structure) => structure.id === before.focusTargetId,
+      );
+    const cues = this.attackCombatFeedbackPolicy.resolve({
+      previousCoreRatio: before.coreRatio,
+      currentCoreRatio: this.attackCombat.coreHealthRatio,
+      focusTargetWasActive: before.focusTargetId !== null,
+      focusTargetStillExists,
+    });
+    const messages: string[] = [];
+    for (const cue of cues) {
+      if (cue === 'core-half') {
+        messages.push('적 코어 절반 돌파! 공격 흐름을 유지하세요.');
+        this.effects.playStrategicCallout(
+          CORE_POSITION,
+          '코어 50% 돌파!',
+          '#ffd166',
+        );
+      } else if (cue === 'core-critical') {
+        messages.push('적 코어 붕괴 직전! 마지막 공격을 집중하세요.');
+        this.effects.playStrategicCallout(
+          CORE_POSITION,
+          '코어 붕괴 직전!',
+          '#ff9bab',
+        );
+        this.cameras.main.flash(130, 255, 139, 139, false);
+      } else if (before.focusTargetPosition !== null) {
+        messages.push(`집중 공격 성공! ${before.focusTargetName}을 제거했습니다.`);
+        this.effects.playStrategicCallout(
+          before.focusTargetPosition,
+          '집중 공격 완료!',
+          '#9fe3c3',
+        );
+      }
+    }
+    if (messages.length > 0) this.setStatus(messages.join('  ·  '));
+  }
+
   private failureMessage(reason: DefenseEditFailureReason): string {
     const messages: Readonly<Record<DefenseEditFailureReason, string>> = {
       'outside-map': '전장 밖에는 시설을 배치할 수 없습니다.',
@@ -2166,7 +2254,7 @@ export class BattlefieldScene extends Phaser.Scene {
     const defenseResult =
       won && sortieReward !== null
         ? {
-        ...defensePerformance,
+            ...defensePerformance,
             sortieReward,
           }
         : null;
@@ -2177,6 +2265,10 @@ export class BattlefieldScene extends Phaser.Scene {
       defenseResult === null
         ? null
         : this.defenseRewardPresenter.present(defenseResult);
+    const loopFeedback =
+      defenseResult === null
+        ? null
+        : this.coreLoopFeedbackPresenter.presentDefense(defenseResult);
     const defenseAdvice = this.feedbackAdvisor.forDefense({
       won,
       defeatedEnemies: this.combat.killCount,
@@ -2190,14 +2282,14 @@ export class BattlefieldScene extends Phaser.Scene {
       eyebrow: `방어 결과 · ${this.roundName()}`,
       title: won ? '방어 성공' : '방어 실패',
       metrics: [
-        `처치 ${this.combat.killCount} · 누수 ${this.combat.leakCount}`,
-        `코어 ${this.combat.coreHealth}/${this.combat.config.coreMaxHealth} · 피해 ${this.combat.leakDamage}`,
+        `처치 ${this.combat.killCount} · 누수 ${this.combat.leakCount} · 코어 ${this.combat.coreHealth}/${this.combat.config.coreMaxHealth}`,
       ],
+      progress: loopFeedback?.progress,
       reward:
         rewardPresentation === null
           ? undefined
           : `${rewardPresentation.headline}\n${rewardPresentation.breakdown}`,
-      advice: `${defenseAdvice}\n${this.defenseStandoutText()}`,
+      advice: `${defenseAdvice}\n${this.defenseStandoutText()}${rewardPresentation === null ? '' : `\n${rewardPresentation.strategyMessage}`}`,
       primaryAction: won
         ? this.roundSession.currentRound === 1 && !this.roundSession.isChallengeMode
           ? '[Enter] 역할 반전'
@@ -2205,8 +2297,7 @@ export class BattlefieldScene extends Phaser.Scene {
         : this.roundSession.isChallengeMode
           ? '[R] 처음부터 다시 시작'
           : '[R] 설계로 돌아가기',
-      secondaryAction:
-        rewardPresentation === null ? undefined : rewardPresentation.strategyMessage,
+      secondaryAction: loopFeedback?.bridgeMessage,
       tone: won ? 'success' : 'failure',
       onPrimary: won
         ? this.roundSession.currentRound === 1 && !this.roundSession.isChallengeMode
@@ -2356,24 +2447,37 @@ export class BattlefieldScene extends Phaser.Scene {
       : won
         ? this.nextUnlockText()
         : '';
+    const completionPresentation =
+      won && completedRound !== null
+        ? this.coreLoopFeedbackPresenter.presentCompletion(
+            completedRound,
+            this.defenseRewardPresenter.present(completedRound.defense).grade,
+          )
+        : null;
+    const completionProgress =
+      completedRound === null
+        ? undefined
+        : this.coreLoopFeedbackPresenter.presentDefense(completedRound.defense)
+            .progress;
     this.resultOverlay.show({
       eyebrow: `공격 결과 · ${this.roundName()}`,
-      title: won ? '내 기지 돌파 성공' : '공격 실패',
-      metrics: [
-        won
-          ? `돌파 시간 ${this.formatTime(completedRound?.attackTimeMs ?? 0)}`
-          : `실패 원인 · ${failure}`,
-        ...(recordOrUnlock.length > 0 ? [recordOrUnlock] : []),
-      ],
+      title: completionPresentation?.title ?? '공격 실패',
+      metrics:
+        completionPresentation === null
+          ? [`실패 원인 · ${failure}`]
+          : completionPresentation.comparison,
+      progress: completionProgress,
       reward: won
         ? `누적 공격 시간 ${this.formatTime(this.roundSession.totalAttackTimeMs)}`
         : undefined,
-      advice: this.feedbackAdvisor.forAttack(
-        won,
-        this.attackCombat.failureReason,
-      ),
+      advice:
+        completionPresentation === null
+          ? this.feedbackAdvisor.forAttack(false, this.attackCombat.failureReason)
+          : `${completionPresentation.conclusion}${recordOrUnlock.length === 0 ? '' : `\n${recordOrUnlock}`}`,
       primaryAction: won ? '[Enter] 다음 라운드' : '[R] 처음부터 다시 시작',
-      secondaryAction: won ? '같은 설계를 양쪽 역할에서 모두 이겨냈습니다.' : undefined,
+      secondaryAction: won
+        ? '방어 성과로 만든 부대가 같은 방어선을 돌파했습니다.'
+        : undefined,
       tone: won ? 'success' : 'failure',
       onPrimary: won
         ? () => this.continueAfterAttackVictory()
@@ -2655,18 +2759,28 @@ export class BattlefieldScene extends Phaser.Scene {
 
     if (this.phase === 'attack-preparation' && this.squadPlan !== null) {
       const reward = this.roundSession.currentDefenseResult?.sortieReward;
+      const defenseResult = this.roundSession.currentDefenseResult;
+      const brief =
+        defenseResult === null
+          ? null
+          : this.coreLoopFeedbackPresenter.presentAttackPreparation(
+              this.editor.battlefield.structures,
+              defenseResult,
+              availableUnitArchetypes(this.roundSession.currentRound),
+            );
       return {
         visible,
         phaseLabel: `${this.roundLabel()} · 공략 준비`,
-        title: '부대를 편성하세요',
-        objective: '타워 상성에 맞춰 세 진입로의 출격 순서를 정하세요.',
+        title: '내 방어선을 분석하세요',
+        objective: '방금 지킨 동일한 설계입니다. 약점을 찾아 부대를 바꾸세요.',
         stats: [
-          `남은 시간 ${Math.ceil(this.attackPreparationRemainingMs / 1000)}초`,
-          `출격 포인트 ${this.squadPlan.remainingSortiePoints}/${this.squadPlan.totalSortiePoints}P`,
-          `대기열 ${this.squadPlan.lanes.map((lane) => lane.length).join('/')}`,
-          ...(reward === undefined
-            ? []
-            : [`보상 · 기본 ${reward.basePoints} + 처치 ${reward.killBonus} + 코어 ${reward.coreHealthBonus}`]),
+          `남은 ${Math.ceil(this.attackPreparationRemainingMs / 1000)}초 · 출격 ${this.squadPlan.remainingSortiePoints}/${this.squadPlan.totalSortiePoints}P`,
+          brief?.defenseSummary ?? '같은 방어 설계 복원 완료',
+          brief?.counterSummary ?? '추천 편성을 확인하세요',
+          brief?.rewardSummary ??
+            (reward === undefined
+              ? '방어 보상 계산 대기'
+              : `방어 보상 · ${reward.totalPoints}P`),
         ],
       };
     }
