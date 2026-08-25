@@ -54,6 +54,10 @@ import {
 import { NORMAL_MODE_ROUND_COUNT } from '../../config/ChallengeModeConfig';
 import { firstRunGuidePromptFor } from '../../config/FirstRunGuideConfig';
 import { defenseSortieRewardForRound } from '../../config/DefenseRewardConfig';
+import {
+  ROUND_ONBOARDING_POLICY,
+  type RoundOnboardingProfile,
+} from '../../config/RoundOnboardingConfig';
 import { Battlefield } from '../../domain/battlefield/Battlefield';
 import type { DefenseEditFailureReason } from '../../application/DefenseEditResult';
 import { AttackCombat } from '../../domain/attack/AttackCombat';
@@ -204,7 +208,8 @@ export class BattlefieldScene extends Phaser.Scene {
     this.leaderboardRequestId = 0;
     this.firstRunGuide = this.firstRunGuideService.createGuide();
     this.phase = 'tutorial';
-    this.preparationRemainingMs = PREPARATION_DURATION_MS;
+    this.preparationRemainingMs =
+      this.currentRoundOnboarding().defensePreparationDurationMs;
     this.defenseStructureCountAtStart = 0;
     this.combat = null;
     this.clearAttackState();
@@ -419,7 +424,7 @@ export class BattlefieldScene extends Phaser.Scene {
       pause: () => this.pauseGame(),
       resume: () => this.resumeGame(),
       exitToOpening: () => this.exitToOpening(),
-      controls: () => this.phaseUiPolicy.resolve(this.phase).controls,
+      controls: () => this.currentPhaseControls(),
     });
     this.audioControlPanel = new AudioControlPanel(this, this.audioDirector);
     this.syncPauseAvailability();
@@ -1162,6 +1167,7 @@ export class BattlefieldScene extends Phaser.Scene {
 
   private upgradeSelectedTower(): void {
     if (this.phase !== 'preparation') return;
+    if (!this.requireAdvancedDefenseEditing()) return;
     if (this.selectedStructureId === null) {
       this.setStatus('먼저 업그레이드할 타워를 선택하세요.', true);
       return;
@@ -1182,6 +1188,7 @@ export class BattlefieldScene extends Phaser.Scene {
 
   private saveDefenseBlueprint(): void {
     if (this.phase !== 'preparation') return;
+    if (!this.requireAdvancedDefenseEditing()) return;
     this.editor.saveBlueprint();
     this.setStatus(
       `현재 설계와 남은 부품 ${this.editor.constructionFunds}을 저장 지점으로 지정했습니다.`,
@@ -1191,6 +1198,7 @@ export class BattlefieldScene extends Phaser.Scene {
 
   private resetDefenseBlueprint(): void {
     if (this.phase !== 'preparation') return;
+    if (!this.requireAdvancedDefenseEditing()) return;
     const restored = this.editor.restoreBlueprint();
     this.selectedStructureId = null;
     this.setStatus(
@@ -1205,6 +1213,7 @@ export class BattlefieldScene extends Phaser.Scene {
 
   private undoDefenseEdit(): void {
     if (this.phase !== 'preparation') return;
+    if (!this.requireAdvancedDefenseEditing()) return;
     this.selectedStructureId = null;
     const restored = this.editor.undo();
     this.setStatus(
@@ -1219,6 +1228,7 @@ export class BattlefieldScene extends Phaser.Scene {
 
   private redoDefenseEdit(): void {
     if (this.phase !== 'preparation') return;
+    if (!this.requireAdvancedDefenseEditing()) return;
     this.selectedStructureId = null;
     const restored = this.editor.redo();
     this.setStatus(
@@ -1722,6 +1732,8 @@ export class BattlefieldScene extends Phaser.Scene {
         this.boardGraphics.strokeRect(x, y, GRID_CELL_SIZE, GRID_CELL_SIZE);
       }
     }
+
+    this.renderTutorialPlacementHints();
 
     for (const entry of this.editor.battlefield.map.entryPoints) {
       const center = this.gridCenter(entry);
@@ -2402,7 +2414,8 @@ export class BattlefieldScene extends Phaser.Scene {
     this.combat = null;
     this.clearAttackState();
     this.phase = 'preparation';
-    this.preparationRemainingMs = PREPARATION_DURATION_MS;
+    this.preparationRemainingMs =
+      this.currentRoundOnboarding().defensePreparationDurationMs;
     this.selectedStructureId = null;
     this.resultOverlay.hide();
     this.setStatus('전투 전 설계와 시설 체력을 복원했습니다. 다시 편집할 수 있습니다.');
@@ -2826,6 +2839,7 @@ export class BattlefieldScene extends Phaser.Scene {
           selected?.kind === 'tower' &&
           upgradeCost !== null &&
           this.editor.constructionFunds >= upgradeCost,
+        tutorialMode: this.currentRoundOnboarding().tutorialRound,
       });
     }
 
@@ -2853,5 +2867,69 @@ export class BattlefieldScene extends Phaser.Scene {
       this.statusHideTimer = null;
     });
     if (isWarning) this.audioDirector.playUi('error');
+  }
+
+  private currentRoundOnboarding(): RoundOnboardingProfile {
+    return ROUND_ONBOARDING_POLICY.resolve(
+      this.roundSession.currentRound,
+      this.roundSession.isChallengeMode,
+    );
+  }
+
+  private currentPhaseControls(): string {
+    if (
+      this.phase === 'preparation' &&
+      this.currentRoundOnboarding().tutorialRound
+    ) {
+      return '마우스 · 팝건 또는 블록 벽 배치/재배치\nSpace · 방어 시작  |  Esc · 계속하기';
+    }
+    return this.phaseUiPolicy.resolve(this.phase).controls;
+  }
+
+  private requireAdvancedDefenseEditing(): boolean {
+    if (this.currentRoundOnboarding().advancedDefenseEditing) return true;
+    this.setStatus(
+      '첫 라운드는 배치와 재배치만 연습합니다. 강화와 설계 이력은 2라운드부터 열립니다.',
+      true,
+    );
+    return false;
+  }
+
+  private renderTutorialPlacementHints(): void {
+    const onboarding = this.currentRoundOnboarding();
+    if (
+      this.phase !== 'preparation' ||
+      !onboarding.tutorialRound ||
+      this.editor.constructionFunds < OBSTACLE_CONSTRUCTION_COST
+    ) {
+      return;
+    }
+
+    for (const hint of onboarding.placementHints) {
+      const position = new GridPosition(hint.column, hint.row);
+      if (this.editor.battlefield.findStructureAt(position) !== null) continue;
+      const x = GRID_OFFSET_X + hint.column * GRID_CELL_SIZE;
+      const y = GRID_OFFSET_Y + hint.row * GRID_CELL_SIZE;
+      this.boardGraphics.fillStyle(0xffd166, 0.16);
+      this.boardGraphics.fillRect(
+        x + 4,
+        y + 4,
+        GRID_CELL_SIZE - 8,
+        GRID_CELL_SIZE - 8,
+      );
+      this.boardGraphics.lineStyle(3, 0xffd166, 0.95);
+      this.boardGraphics.strokeRect(
+        x + 5,
+        y + 5,
+        GRID_CELL_SIZE - 10,
+        GRID_CELL_SIZE - 10,
+      );
+      this.boardGraphics.beginPath();
+      this.boardGraphics.moveTo(x + GRID_CELL_SIZE / 2 - 7, y + GRID_CELL_SIZE / 2);
+      this.boardGraphics.lineTo(x + GRID_CELL_SIZE / 2 + 7, y + GRID_CELL_SIZE / 2);
+      this.boardGraphics.moveTo(x + GRID_CELL_SIZE / 2, y + GRID_CELL_SIZE / 2 - 7);
+      this.boardGraphics.lineTo(x + GRID_CELL_SIZE / 2, y + GRID_CELL_SIZE / 2 + 7);
+      this.boardGraphics.strokePath();
+    }
   }
 }

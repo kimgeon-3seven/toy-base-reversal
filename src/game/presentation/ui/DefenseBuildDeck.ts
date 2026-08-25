@@ -14,6 +14,7 @@ export interface DefenseBuildDeckModel {
   readonly canUndo: boolean;
   readonly canRedo: boolean;
   readonly canUpgrade: boolean;
+  readonly tutorialMode: boolean;
 }
 
 export interface DefenseBuildDeckActions {
@@ -41,6 +42,9 @@ export class DefenseBuildDeck {
   private readonly upgradeButton: TextButton;
   private readonly undoButton: TextButton;
   private readonly redoButton: TextButton;
+  private readonly saveButton: TextButton;
+  private readonly resetButton: TextButton;
+  private readonly startButton: TextButton;
   private readonly summary: Phaser.GameObjects.Text;
 
   public constructor(
@@ -112,7 +116,7 @@ export class DefenseBuildDeck {
       '다시\n↷',
       actions.redo,
     );
-    const saveButton = new TextButton(
+    this.saveButton = new TextButton(
       scene,
       677,
       43,
@@ -121,7 +125,7 @@ export class DefenseBuildDeck {
       '저장\n[S]',
       actions.save,
     );
-    const resetButton = new TextButton(
+    this.resetButton = new TextButton(
       scene,
       740,
       43,
@@ -130,7 +134,7 @@ export class DefenseBuildDeck {
       '저장점\n복구',
       actions.reset,
     );
-    const startButton = new TextButton(
+    this.startButton = new TextButton(
       scene,
       875,
       43,
@@ -151,9 +155,9 @@ export class DefenseBuildDeck {
       this.upgradeButton,
       this.undoButton,
       this.redoButton,
-      saveButton,
-      resetButton,
-      startButton,
+      this.saveButton,
+      this.resetButton,
+      this.startButton,
     );
     this.container = scene.add.container(32, 706, [
       ...panel,
@@ -167,6 +171,7 @@ export class DefenseBuildDeck {
     for (const tower of TOWERS) {
       const button = this.towerButtons.get(tower);
       const available = model.availableTowers.includes(tower);
+      button?.setVisible(!model.tutorialMode || tower === 'popgun');
       button?.setLabel(
         available
           ? `${TOWER_MARKS[tower]}  ${TOWER_NAMES[tower]}\n${TOWER_CONSTRUCTION_COSTS[tower]} 부품`
@@ -177,14 +182,34 @@ export class DefenseBuildDeck {
         model.activeKind === 'tower' && model.activeTower === tower,
       );
     }
+    this.applyLayout(model.tutorialMode);
     this.obstacleButton.setSelected(model.activeKind === 'obstacle');
-    this.upgradeButton.setEnabled(model.canUpgrade);
-    this.undoButton.setEnabled(model.canUndo);
-    this.redoButton.setEnabled(model.canRedo);
-    this.summary.setText(`◆ ${model.funds} 부품  ·  우클릭 판매 100% 환급`);
+    this.upgradeButton.setEnabled(!model.tutorialMode && model.canUpgrade);
+    this.undoButton.setEnabled(!model.tutorialMode && model.canUndo);
+    this.redoButton.setEnabled(!model.tutorialMode && model.canRedo);
+    this.summary.setText(
+      model.tutorialMode
+        ? `◆ 첫 설계 · ${model.funds} 부품  ·  빛나는 칸에 팝건 1개 또는 블록 벽 2개`
+        : `◆ ${model.funds} 부품  ·  우클릭 판매 100% 환급`,
+    );
   }
 
   public setVisible(visible: boolean): void {
     this.container.setVisible(visible);
+  }
+
+  private applyLayout(tutorialMode: boolean): void {
+    this.towerButtons.get('popgun')?.gameObject.setX(tutorialMode ? 70 : 63);
+    this.obstacleButton.gameObject.setX(tutorialMode ? 188 : 402);
+    this.startButton.gameObject.setX(tutorialMode ? 848 : 875);
+    for (const button of [
+      this.upgradeButton,
+      this.undoButton,
+      this.redoButton,
+      this.saveButton,
+      this.resetButton,
+    ]) {
+      button.setVisible(!tutorialMode);
+    }
   }
 }
