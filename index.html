@@ -10,7 +10,57 @@
     <title>Toy Base Reversal</title>
   </head>
   <body>
-    <main id="app" aria-label="Toy Base Reversal 게임 화면"></main>
+    <div id="game-shell">
+      <main id="app" aria-label="Toy Base Reversal 게임 화면"></main>
+      <section
+        id="web-entry"
+        class="web-entry"
+        data-phase="loading"
+        aria-labelledby="web-entry-title"
+        aria-live="polite"
+      >
+        <div class="web-entry-card">
+          <p class="web-entry-kicker">장난감 전쟁 · 출격 준비</p>
+          <h1 id="web-entry-title">TOY BASE REVERSAL</h1>
+          <p class="web-entry-subtitle">지키고, 뒤집고, 직접 돌파하라</p>
+          <div id="web-entry-progress-panel" class="web-entry-progress-panel">
+            <progress
+              id="web-entry-progress"
+              max="1"
+              value="0"
+              aria-label="게임 파일 로딩 진행률"
+            ></progress>
+            <strong id="web-entry-progress-text">0%</strong>
+          </div>
+          <p id="web-entry-status" class="web-entry-status">
+            장난감 상자를 여는 중입니다…
+          </p>
+          <div class="web-entry-actions">
+            <button id="web-entry-start" type="button" hidden>
+              클릭해서 시작
+            </button>
+            <button id="web-entry-start-fullscreen" type="button" hidden>
+              전체화면으로 플레이
+            </button>
+            <button id="web-entry-retry" type="button" hidden>
+              다시 불러오기
+            </button>
+          </div>
+          <p id="web-entry-recommendation" class="web-entry-recommendation">
+            PC 브라우저 · 가로 화면 권장
+          </p>
+        </div>
+      </section>
+      <button
+        id="game-fullscreen"
+        class="game-fullscreen-button"
+        type="button"
+        aria-pressed="false"
+        hidden
+      >
+        전체화면
+      </button>
+    </div>
     <script type="module" src="/src/main.ts"></script>
   </body>
 </html>
