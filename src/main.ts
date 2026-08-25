@@ -3,6 +3,7 @@ import { StartGame } from './game/application/StartGame';
 import { WebEntryCoordinator } from './game/application/WebEntryCoordinator';
 import { WebEntryDeviceAdvisor } from './game/application/WebEntryDeviceAdvisor';
 import { BrowserFullscreenGateway } from './game/infrastructure/dom/BrowserFullscreenGateway';
+import { BrowserPageActivityMonitor } from './game/infrastructure/dom/BrowserPageActivityMonitor';
 import { DomWebEntryView } from './game/infrastructure/dom/DomWebEntryView';
 import { PhaserGameRuntime } from './game/infrastructure/phaser/PhaserGameRuntime';
 
@@ -17,7 +18,8 @@ const deviceAdvice = new WebEntryDeviceAdvisor().advise({
 const entryView = new DomWebEntryView(document, deviceAdvice);
 const fullscreen = new BrowserFullscreenGateway(document, shell);
 const webEntry = new WebEntryCoordinator(entryView, fullscreen);
-const runtime = new PhaserGameRuntime('app', webEntry);
+const pageActivity = new BrowserPageActivityMonitor(document, window);
+const runtime = new PhaserGameRuntime('app', webEntry, pageActivity);
 const startGame = new StartGame(runtime);
 
 startGame.execute();

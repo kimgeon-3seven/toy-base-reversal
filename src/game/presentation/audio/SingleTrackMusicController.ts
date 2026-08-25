@@ -1,6 +1,9 @@
 export interface MusicHandle {
   readonly isPlaying: boolean;
+  readonly isPaused: boolean;
   play(): boolean;
+  pause(): boolean;
+  resume(): boolean;
   setVolume(volume: number): unknown;
 }
 
@@ -20,7 +23,14 @@ export class SingleTrackMusicController {
     this.music = existing[0] ?? this.music ?? this.pool.create();
     for (const duplicate of existing.slice(1)) this.pool.remove(duplicate);
     this.music.setVolume(volume);
-    if (!this.music.isPlaying) this.music.play();
+    if (this.music.isPaused) this.music.resume();
+    else if (!this.music.isPlaying) this.music.play();
+  }
+
+  public pause(): void {
+    const existing = this.pool.list();
+    this.music = existing[0] ?? this.music;
+    if (this.music?.isPlaying) this.music.pause();
   }
 
   public setVolume(volume: number): void {

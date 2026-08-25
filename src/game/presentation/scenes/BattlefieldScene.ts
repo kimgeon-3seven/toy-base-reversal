@@ -1,6 +1,8 @@
 import Phaser from 'phaser';
 import { DefenseEditor } from '../../application/DefenseEditor';
 import type { AudioSettingsService } from '../../application/AudioSettingsService';
+import { GamePauseState, type PauseOrigin } from '../../application/GamePauseState';
+import { PageActivityCoordinator } from '../../application/PageActivityCoordinator';
 import type { GameRecordService } from '../../application/GameRecordService';
 import type {
   LeaderboardResult,
@@ -73,6 +75,7 @@ import { BreadthFirstPathfinder } from '../../domain/pathfinding/BreadthFirstPat
 import { RoundSession } from '../../domain/rounds/RoundSession';
 import type { PlayerRecord } from '../../domain/records/PlayerRecord';
 import type { NicknameEditor } from '../../ports/NicknameEditor';
+import type { PageActivityMonitor } from '../../ports/PageActivityMonitor';
 import type { StructureKind } from '../../domain/structures/DefenseStructure';
 import type { CombatEvent } from '../../domain/combat/CombatEvent';
 import { BattlefieldSpriteRenderer } from '../rendering/BattlefieldSpriteRenderer';
@@ -134,7 +137,9 @@ export class BattlefieldScene extends Phaser.Scene {
   private audioDirector!: BattlefieldAudioDirector;
   private audioControlPanel: AudioControlPanel | null = null;
   private pauseMenu: PauseMenu | null = null;
-  private isPaused = false;
+  private pageActivityCoordinator: PageActivityCoordinator | null = null;
+  private pageAudioSuspended = false;
+  private readonly pauseState = new GamePauseState();
   private statusText!: Phaser.GameObjects.Text;
   private statusHideTimer: Phaser.Time.TimerEvent | null = null;
   private roundFlowHeader!: RoundFlowHeader;
@@ -199,14 +204,18 @@ export class BattlefieldScene extends Phaser.Scene {
     private readonly nicknameEditor: NicknameEditor,
     private readonly firstRunGuideService: FirstRunGuideService,
     private readonly audioSettingsService: AudioSettingsService,
+    private readonly pageActivityMonitor: PageActivityMonitor,
   ) {
     super({ key: 'BattlefieldScene' });
   }
 
   public create(): void {
+    this.pageActivityCoordinator?.stop();
+    this.pageActivityCoordinator = null;
     this.audioControlPanel = null;
     this.pauseMenu = null;
-    this.isPaused = false;
+    this.pageAudioSuspended = false;
+    this.pauseState.reset();
     this.statusHideTimer = null;
     this.time.paused = false;
     this.tweens.resumeAll();
@@ -277,8 +286,10 @@ export class BattlefieldScene extends Phaser.Scene {
     this.createGuideCoachMark();
     this.createLeaderboardOverlay();
     this.createGameControls();
+    this.configurePageActivity();
 
     this.input.on('pointerdown', (pointer: Phaser.Input.Pointer) => {
+      this.resumeAudioAfterPageReturn();
       if (this.isPaused) return;
       this.audioDirector.startMusic();
       this.audioDirector.playUi('click');
@@ -443,18 +454,53 @@ export class BattlefieldScene extends Phaser.Scene {
     this.syncPauseAvailability();
   }
 
-  private pauseGame(): void {
-    if (this.isPaused || !this.canPause()) return;
-    this.isPaused = true;
+  private configurePageActivity(): void {
+    const coordinator = new PageActivityCoordinator(this.pageActivityMonitor, {
+      deactivate: () => this.handlePageInactive(),
+      activate: () => this.handlePageActive(),
+    });
+    this.pageActivityCoordinator = coordinator;
+    coordinator.start();
+    this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
+      coordinator.stop();
+      if (this.pageActivityCoordinator === coordinator) {
+        this.pageActivityCoordinator = null;
+      }
+    });
+  }
+
+  private handlePageInactive(): void {
+    this.pageAudioSuspended = true;
+    this.audioDirector.suspendForPageActivity();
+    if (!this.isPaused && this.canPause()) this.pauseGame('page-inactive');
+    this.syncCanvasAccessibilityState();
+  }
+
+  private handlePageActive(): void {
+    // Audio and combat intentionally remain suspended until the next user action.
+    this.syncCanvasAccessibilityState();
+  }
+
+  private resumeAudioAfterPageReturn(): void {
+    if (!this.pageAudioSuspended || !this.pageActivityMonitor.isActive) return;
+    this.pageAudioSuspended = false;
+    this.audioDirector.resumeAfterPageActivity();
+    this.syncCanvasAccessibilityState();
+  }
+
+  private pauseGame(origin: PauseOrigin = 'manual'): void {
+    if (!this.canPause() || !this.pauseState.pause(origin)) return;
     this.time.paused = true;
     this.tweens.pauseAll();
-    this.pauseMenu?.open();
+    this.pauseMenu?.open(origin);
     this.syncCanvasAccessibilityState();
   }
 
   private resumeGame(): void {
     if (!this.isPaused) return;
-    this.isPaused = false;
+    if (!this.pageActivityMonitor.isActive) return;
+    this.resumeAudioAfterPageReturn();
+    this.pauseState.resume();
     this.time.paused = false;
     this.tweens.resumeAll();
     this.pauseMenu?.close();
@@ -463,7 +509,7 @@ export class BattlefieldScene extends Phaser.Scene {
 
   private exitToOpening(): void {
     if (!this.isPaused) return;
-    this.isPaused = false;
+    this.pauseState.reset();
     this.time.paused = false;
     this.tweens.resumeAll();
     this.audioControlPanel?.close();
@@ -480,6 +526,10 @@ export class BattlefieldScene extends Phaser.Scene {
       this.phase === 'attack-preparation' ||
       this.phase === 'attack-combat'
     );
+  }
+
+  private get isPaused(): boolean {
+    return this.pauseState.isPaused;
   }
 
   private syncPauseAvailability(): void {
@@ -906,6 +956,7 @@ export class BattlefieldScene extends Phaser.Scene {
 
   private configureKeyboardInput(): void {
     this.input.keyboard?.on('keydown', (event: KeyboardEvent) => {
+      this.resumeAudioAfterPageReturn();
       this.audioDirector.startMusic();
       if (this.isPaused) {
         if (event.code === 'Escape') {
@@ -2865,6 +2916,8 @@ export class BattlefieldScene extends Phaser.Scene {
     };
     this.game.canvas.dataset.gamePhase = this.phase;
     this.game.canvas.dataset.gamePaused = String(this.isPaused);
+    this.game.canvas.dataset.pageActive = String(this.pageActivityMonitor.isActive);
+    this.game.canvas.dataset.audioSuspended = String(this.pageAudioSuspended);
     this.game.canvas.dataset.guideStage = this.firstRunGuide.stage;
     this.game.canvas.dataset.guideMode = this.firstRunGuide.isDetailed
       ? 'detailed'

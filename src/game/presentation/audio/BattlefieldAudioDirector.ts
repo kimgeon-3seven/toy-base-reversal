@@ -16,9 +16,14 @@ const SHOT_SOUND: Readonly<Record<CombatAttackStyle, string>> = {
   commander: AUDIO_ASSETS.shotPiercer,
 };
 
+const TRANSIENT_AUDIO_ASSETS = Object.values(AUDIO_ASSETS).filter(
+  (key) => key !== AUDIO_ASSETS.music,
+);
+
 export class BattlefieldAudioDirector {
   private readonly musicController: SingleTrackMusicController;
   private lastPlayedAt = new Map<string, number>();
+  private pageSuspended = false;
 
   public constructor(
     private readonly scene: Phaser.Scene,
@@ -51,11 +56,26 @@ export class BattlefieldAudioDirector {
   public startMusic(): void {
     if (
       this.settings.muted ||
+      this.pageSuspended ||
       !this.scene.cache.audio.exists(AUDIO_ASSETS.music)
     ) {
       return;
     }
     this.musicController.start(this.settings.musicVolume);
+  }
+
+  public suspendForPageActivity(): void {
+    if (this.pageSuspended) return;
+    this.pageSuspended = true;
+    this.musicController.pause();
+    for (const key of TRANSIENT_AUDIO_ASSETS) this.scene.sound.stopByKey(key);
+    this.lastPlayedAt.clear();
+  }
+
+  public resumeAfterPageActivity(): void {
+    if (!this.pageSuspended) return;
+    this.pageSuspended = false;
+    this.startMusic();
   }
 
   public toggleMute(): boolean {
@@ -113,7 +133,13 @@ export class BattlefieldAudioDirector {
   }
 
   private playThrottled(key: string, volume: number, throttleMs: number): void {
-    if (this.settings.muted || !this.scene.cache.audio.exists(key)) return;
+    if (
+      this.pageSuspended ||
+      this.settings.muted ||
+      !this.scene.cache.audio.exists(key)
+    ) {
+      return;
+    }
     const now = this.scene.time.now;
     if (now - (this.lastPlayedAt.get(key) ?? Number.NEGATIVE_INFINITY) < throttleMs) {
       return;
@@ -136,8 +162,20 @@ class PhaserMusicHandle implements MusicHandle {
     return this.sound.isPlaying;
   }
 
+  public get isPaused(): boolean {
+    return this.sound.isPaused;
+  }
+
   public play(): boolean {
     return this.sound.play();
+  }
+
+  public pause(): boolean {
+    return this.sound.pause();
+  }
+
+  public resume(): boolean {
+    return this.sound.resume();
   }
 
   public setVolume(volume: number): unknown {
