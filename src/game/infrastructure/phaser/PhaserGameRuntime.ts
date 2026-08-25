@@ -5,6 +5,7 @@ import { GameRecordService } from '../../application/GameRecordService';
 import { LeaderboardService } from '../../application/LeaderboardService';
 import { GAME_HEIGHT, GAME_WIDTH } from '../../config/GameConfig';
 import type { GameRuntime } from '../../ports/GameRuntime';
+import type { WebEntryFlow } from '../../ports/WebEntryFlow';
 import { BootScene } from '../../presentation/scenes/BootScene';
 import { BattlefieldScene } from '../../presentation/scenes/BattlefieldScene';
 import { DomNicknameEditor } from '../dom/DomNicknameEditor';
@@ -17,7 +18,10 @@ import { LocalStoragePlayerRecordRepository } from '../storage/LocalStoragePlaye
 export class PhaserGameRuntime implements GameRuntime {
   private game: Phaser.Game | null = null;
 
-  public constructor(private readonly parentId: string) {}
+  public constructor(
+    private readonly parentId: string,
+    private readonly webEntry: WebEntryFlow,
+  ) {}
 
   public start(): void {
     if (this.game !== null) {
@@ -66,9 +70,10 @@ export class PhaserGameRuntime implements GameRuntime {
       scale: {
         mode: Phaser.Scale.FIT,
         autoCenter: Phaser.Scale.CENTER_BOTH,
+        fullscreenTarget: 'game-shell',
       },
       scene: [
-        BootScene,
+        new BootScene(this.webEntry),
         new BattlefieldScene(
           recordService,
           leaderboardService,
