@@ -36,7 +36,7 @@ export const PROTOTYPE_ATTACK_COMBAT_CONFIG: AttackCombatConfig = {
       attackIntervalMs: 720,
     },
     swarm: {
-      maxHealth: 38,
+      maxHealth: 50,
       movementSpeed: 2.05,
       attackDamage: 8,
       attackRange: 1.1,
