@@ -1,4 +1,5 @@
 import type Phaser from 'phaser';
+import type { PauseOrigin } from '../../application/GamePauseState';
 import { GAME_HEIGHT, GAME_WIDTH } from '../../config/GameConfig';
 import { IMAGE_ASSETS } from '../assets/GameAssets';
 import { TextButton } from './TextButton';
@@ -22,6 +23,7 @@ export class PauseMenu {
   private readonly confirmExitButton: TextButton;
   private readonly cancelButton: TextButton;
   private pauseAvailable = false;
+  private pauseOrigin: PauseOrigin = 'manual';
 
   public constructor(scene: Phaser.Scene, actions: PauseMenuActions) {
     this.pauseButton = new TextButton(
@@ -163,8 +165,9 @@ export class PauseMenu {
     this.pauseButton.setEnabled(available);
   }
 
-  public open(): void {
+  public open(origin: PauseOrigin = 'manual'): void {
     if (!this.pauseAvailable) return;
+    this.pauseOrigin = origin;
     this.showPauseOptions();
     this.overlay.setVisible(true);
     this.pauseButton.setVisible(false);
@@ -177,8 +180,14 @@ export class PauseMenu {
   }
 
   private showPauseOptions(): void {
-    this.title.setText('일시정지');
-    this.body.setText('전투와 모든 타이머가 멈췄습니다.');
+    this.title.setText(
+      this.pauseOrigin === 'page-inactive' ? '자동 일시정지' : '일시정지',
+    );
+    this.body.setText(
+      this.pauseOrigin === 'page-inactive'
+        ? '다른 창으로 이동해 전투와 소리를 멈췄습니다.\n계속하기를 눌러 안전하게 재개하세요.'
+        : '전투와 모든 타이머가 멈췄습니다.',
+    );
     this.cancelButton.setLabel('취소');
     this.cancelButton.gameObject.setPosition(100, 105);
     this.resumeButton.setVisible(true);

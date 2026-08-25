@@ -5,6 +5,7 @@ import { GameRecordService } from '../../application/GameRecordService';
 import { LeaderboardService } from '../../application/LeaderboardService';
 import { GAME_HEIGHT, GAME_WIDTH } from '../../config/GameConfig';
 import type { GameRuntime } from '../../ports/GameRuntime';
+import type { PageActivityMonitor } from '../../ports/PageActivityMonitor';
 import type { WebEntryFlow } from '../../ports/WebEntryFlow';
 import { BootScene } from '../../presentation/scenes/BootScene';
 import { BattlefieldScene } from '../../presentation/scenes/BattlefieldScene';
@@ -21,6 +22,7 @@ export class PhaserGameRuntime implements GameRuntime {
   public constructor(
     private readonly parentId: string,
     private readonly webEntry: WebEntryFlow,
+    private readonly pageActivityMonitor: PageActivityMonitor,
   ) {}
 
   public start(): void {
@@ -80,8 +82,10 @@ export class PhaserGameRuntime implements GameRuntime {
           nicknameEditor,
           firstRunGuideService,
           audioSettingsService,
+          this.pageActivityMonitor,
         ),
       ],
     });
+    this.game.sound.pauseOnBlur = false;
   }
 }
