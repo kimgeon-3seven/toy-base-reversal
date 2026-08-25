@@ -45,7 +45,9 @@ import {
   availableTowerArchetypes,
   availableUnitArchetypes,
   TOWER_NAMES,
+  TOWER_ROLE_SUMMARIES,
   UNIT_NAMES,
+  UNIT_ROLE_SUMMARIES,
 } from '../../config/ContentConfig';
 import {
   createPrototypeConstructionEconomy,
@@ -1249,7 +1251,7 @@ export class BattlefieldScene extends Phaser.Scene {
     this.activeTowerArchetype = towerArchetype;
     this.selectedStructureId = null;
     this.setStatus(
-      `${TOWER_NAMES[towerArchetype]} 배치 모드: 부품 ${TOWER_CONSTRUCTION_COSTS[towerArchetype]}`,
+      `${TOWER_NAMES[towerArchetype]} · ${TOWER_ROLE_SUMMARIES[towerArchetype]} · 부품 ${TOWER_CONSTRUCTION_COSTS[towerArchetype]}`,
     );
     this.updatePhaseInterface();
     this.renderBattlefield();
@@ -1351,7 +1353,7 @@ export class BattlefieldScene extends Phaser.Scene {
     }
     this.selectedAttackUnitKind = unitKind;
     this.setStatus(
-      `${UNIT_NAMES[unitKind]} 선택: 전장의 진입 지점을 클릭하거나 Q/W/E로 추가합니다.`,
+      `${UNIT_NAMES[unitKind]} · ${UNIT_ROLE_SUMMARIES[unitKind]} · 진입 지점을 클릭하거나 Q/W/E로 추가합니다.`,
     );
     this.updatePhaseInterface();
     this.renderBattlefield();

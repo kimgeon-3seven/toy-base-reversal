@@ -11,15 +11,13 @@ import type { CombatEvent } from './CombatEvent';
 import type { CoreLeakDamagePolicy } from './CoreLeakDamagePolicy';
 import { DefenseEnemy } from './DefenseEnemy';
 import type { DefenseWave } from './DefenseWave';
+import { TowerAttackPatternResolver } from './TowerAttackPatternResolver';
+import {
+  isValidTowerCombatStats,
+  type TowerCombatStats,
+} from './TowerCombatStats';
 
 export type DefenseCombatState = 'running' | 'won' | 'lost';
-
-export interface TowerCombatStats {
-  readonly rangeInCells: number;
-  readonly damage: number;
-  readonly attackIntervalMs: number;
-  readonly splashRadiusInCells: number;
-}
 
 export interface DefenseCombatConfig {
   readonly coreMaxHealth: number;
@@ -40,6 +38,7 @@ export class DefenseCombat {
   private breachedEnemies = 0;
   private appliedCoreLeakDamage = 0;
   private readonly pendingEvents: CombatEvent[] = [];
+  private readonly towerAttackPatternResolver = new TowerAttackPatternResolver();
 
   public constructor(
     public readonly battlefield: Battlefield,
@@ -49,11 +48,7 @@ export class DefenseCombat {
     if (
       config.coreMaxHealth <= 0 ||
       Object.values(config.towers).some(
-        (tower) =>
-          tower.rangeInCells <= 0 ||
-          tower.damage <= 0 ||
-          tower.attackIntervalMs <= 0 ||
-          tower.splashRadiusInCells < 0,
+        (tower) => !isValidTowerCombatStats(tower),
       )
     ) {
       throw new Error('Defense combat configuration values must be positive.');
@@ -170,25 +165,28 @@ export class DefenseCombat {
         continue;
       }
 
-      const affectedEnemies =
-        towerStats.splashRadiusInCells === 0
-          ? [target]
-          : this.enemies.filter(
-              (enemy) =>
-                this.distanceBetweenCoordinates(
-                  enemy.renderColumn,
-                  enemy.renderRow,
-                  target.renderColumn,
-                  target.renderRow,
-                ) <= towerStats.splashRadiusInCells,
-            );
+      const candidates = this.enemies.map((enemy) => ({
+        target: enemy,
+        column: enemy.renderColumn,
+        row: enemy.renderRow,
+      }));
+      const primary = candidates.find((candidate) => candidate.target === target);
+      if (primary === undefined) continue;
+      const hits = this.towerAttackPatternResolver.resolve(
+        tower.position,
+        primary,
+        candidates,
+        towerStats,
+      );
       const upgradeMultiplier =
         this.config.towerUpgradePolicy.damageMultiplier(tower);
-      for (const enemy of affectedEnemies) {
+      for (const hit of hits) {
+        const enemy = hit.candidate.target;
         enemy.takeDamage(
           towerStats.damage *
             upgradeMultiplier *
-            towerDamageMultiplier(towerArchetype, enemy.stats.archetype),
+            towerDamageMultiplier(towerArchetype, enemy.stats.archetype) *
+            hit.damageMultiplier,
         );
       }
       const targetMultiplier = towerDamageMultiplier(
@@ -207,6 +205,10 @@ export class DefenseCombat {
           column: target.renderColumn,
           row: target.renderRow,
         },
+        secondaryTargets: hits.slice(1).map(({ candidate }) => ({
+          column: candidate.column,
+          row: candidate.row,
+        })),
         damage: towerStats.damage * upgradeMultiplier * targetMultiplier,
         effectiveness: targetMultiplier > 1 ? 'favored' : 'normal',
       });

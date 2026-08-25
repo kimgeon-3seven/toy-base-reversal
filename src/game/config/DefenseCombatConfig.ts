@@ -66,19 +66,24 @@ export const PROTOTYPE_DEFENSE_COMBAT_CONFIG: DefenseCombatConfig = {
       rangeInCells: 3.35,
       damage: 9,
       attackIntervalMs: 310,
-      splashRadiusInCells: 0,
+      attackPattern: { kind: 'single' },
     },
     mortar: {
       rangeInCells: 3.85,
       damage: 20,
       attackIntervalMs: 1_050,
-      splashRadiusInCells: 1.3,
+      attackPattern: { kind: 'splash', radiusInCells: 1.3 },
     },
     piercer: {
       rangeInCells: 4.1,
       damage: 34,
       attackIntervalMs: 1_420,
-      splashRadiusInCells: 0,
+      attackPattern: {
+        kind: 'pierce',
+        maxTargets: 3,
+        secondaryDamageMultiplier: 0.6,
+        corridorWidthInCells: 0.4,
+      },
     },
   },
 };

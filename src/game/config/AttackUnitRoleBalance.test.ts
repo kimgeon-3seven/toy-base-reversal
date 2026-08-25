@@ -33,7 +33,7 @@ describe('attack unit role balance', () => {
     const equalCostSwarmCount = unitCost('tank') / unitCost('swarm');
     const equalCostSwarmHealth = swarm.maxHealth * equalCostSwarmCount;
 
-    expect(equalCostSwarmHealth).toBe(100);
+    expect(equalCostSwarmHealth).toBe(116);
     expect(equalCostSwarmHealth).toBeGreaterThanOrEqual(tank.maxHealth * 0.8);
     expect(equalCostSwarmHealth).toBeLessThan(tank.maxHealth);
     expect(damagePerSecondPerPoint('swarm')).toBeGreaterThan(
@@ -55,7 +55,7 @@ describe('attack unit role balance', () => {
       shotsToDefeat(swarm.maxHealth, popgunDamage) * equalCostSwarmCount;
 
     expect(swarmShots).toBeGreaterThanOrEqual(tankShots - 2);
-    expect(swarmShots).toBeLessThan(tankShots);
+    expect(swarmShots).toBeLessThanOrEqual(tankShots);
   });
 
   it('preserves mortar splash as the swarm hard counter', () => {

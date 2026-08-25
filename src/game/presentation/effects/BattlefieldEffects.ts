@@ -34,6 +34,7 @@ export class BattlefieldEffects {
           event.style,
           event.effectiveness,
           event.damage,
+          event.secondaryTargets ?? [],
         );
       } else if (event.type === 'destroyed') {
         this.playDestruction(event.position, event.targetKind === 'structure');
@@ -87,12 +88,20 @@ export class BattlefieldEffects {
     style: CombatAttackStyle,
     effectiveness: CombatHitEffectiveness,
     damage: number,
+    secondaryTargets: readonly CombatPoint[],
   ): void {
     const source = this.toWorld(sourcePosition);
     const target = this.toWorld(targetPosition);
+    const secondaryImpactPoints = secondaryTargets.map((position) =>
+      this.toWorld(position),
+    );
+    const projectileTarget =
+      style === 'piercer'
+        ? (secondaryImpactPoints.at(-1) ?? target)
+        : target;
     const color = ATTACK_COLORS[style];
     const angle = Phaser.Math.RadToDeg(
-      Math.atan2(target.y - source.y, target.x - source.x),
+      Math.atan2(projectileTarget.y - source.y, projectileTarget.x - source.x),
     );
     const favored = effectiveness === 'favored';
     const trail = this.scene.add.graphics().setDepth(41);
@@ -101,7 +110,12 @@ export class BattlefieldEffects {
       color,
       favored ? 0.62 : 0.3,
     );
-    trail.lineBetween(source.x, source.y, target.x, target.y);
+    trail.lineBetween(
+      source.x,
+      source.y,
+      projectileTarget.x,
+      projectileTarget.y,
+    );
     this.scene.tweens.add({
       targets: trail,
       alpha: 0,
@@ -145,8 +159,8 @@ export class BattlefieldEffects {
         const arc =
           style === 'mortar' ? Math.sin(Math.PI * flight.progress) * 58 : 0;
         projectile.setPosition(
-          Phaser.Math.Linear(source.x, target.x, flight.progress),
-          Phaser.Math.Linear(source.y, target.y, flight.progress) - arc,
+          Phaser.Math.Linear(source.x, projectileTarget.x, flight.progress),
+          Phaser.Math.Linear(source.y, projectileTarget.y, flight.progress) - arc,
         );
         if (style !== 'piercer') projectile.setAngle(180 * flight.progress);
       },
@@ -158,6 +172,9 @@ export class BattlefieldEffects {
           style === 'mortar',
           effectiveness,
         );
+        for (const secondaryImpactPoint of secondaryImpactPoints) {
+          this.playImpact(secondaryImpactPoint, color, false, 'normal');
+        }
         this.playFavoredCallout(targetPosition, damage, effectiveness);
       },
     });

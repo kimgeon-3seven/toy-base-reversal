@@ -3,6 +3,8 @@ import { GridPosition } from '../grid/GridPosition';
 import type { DefenseStructure } from '../structures/DefenseStructure';
 import type { TowerUpgradePolicy } from '../structures/TowerUpgradePolicy';
 import type { CombatEvent } from '../combat/CombatEvent';
+import { TowerAttackPatternResolver } from '../combat/TowerAttackPatternResolver';
+import type { TowerCombatStats } from '../combat/TowerCombatStats';
 import {
   towerDamageMultiplier,
   unitDamageMultiplier,
@@ -68,12 +70,7 @@ export interface AttackCombatConfig {
   readonly timeLimitMs: number;
   readonly towerUpgradePolicy: TowerUpgradePolicy;
   readonly unitStats: Readonly<Record<AttackUnitKind, AttackUnitStats>>;
-  readonly towers: Readonly<Record<TowerArchetype, {
-    readonly rangeInCells: number;
-    readonly damage: number;
-    readonly attackIntervalMs: number;
-    readonly splashRadiusInCells: number;
-  }>>;
+  readonly towers: Readonly<Record<TowerArchetype, TowerCombatStats>>;
   readonly commander: {
     readonly maxHealth: number;
     readonly attackDamage: number;
@@ -102,6 +99,7 @@ export class AttackCombat {
   private readonly focusedUnitIds = new Set<string>();
   private readonly unitPathStepCache = new Map<string, UnitPathStepCache>();
   private readonly pendingEvents: CombatEvent[] = [];
+  private readonly towerAttackPatternResolver = new TowerAttackPatternResolver();
 
   public readonly commander: AttackCommander;
 
@@ -400,24 +398,26 @@ export class AttackCombat {
           archetype: null,
           takeDamage: (amount: number) => this.commander.takeDamage(amount),
         },
-      ]
-        .filter((target) => target.distance <= towerStats.rangeInCells)
-        .sort((left, right) => left.distance - right.distance);
-      const target = targets[0];
+      ];
+      const target = targets
+        .filter((candidate) => candidate.distance <= towerStats.rangeInCells)
+        .sort((left, right) => left.distance - right.distance)[0];
       if (target === undefined) continue;
-      const affectedTargets =
-        towerStats.splashRadiusInCells === 0
-          ? [target]
-          : targets.filter(
-              (candidate) =>
-                this.distance(
-                  candidate.column,
-                  candidate.row,
-                  target.column,
-                  target.row,
-                ) <= towerStats.splashRadiusInCells,
-            );
-      for (const affected of affectedTargets) {
+      const candidates = targets.map((candidate) => ({
+        target: candidate,
+        column: candidate.column,
+        row: candidate.row,
+      }));
+      const primary = candidates.find((candidate) => candidate.target === target);
+      if (primary === undefined) continue;
+      const hits = this.towerAttackPatternResolver.resolve(
+        tower.position,
+        primary,
+        candidates,
+        towerStats,
+      );
+      for (const hit of hits) {
+        const affected = hit.candidate.target;
         const multiplier =
           affected.archetype === null
             ? 1
@@ -425,7 +425,8 @@ export class AttackCombat {
         affected.takeDamage(
           towerStats.damage *
             this.config.towerUpgradePolicy.damageMultiplier(tower) *
-            multiplier,
+            multiplier *
+            hit.damageMultiplier,
         );
       }
       const targetMultiplier =
@@ -448,6 +449,10 @@ export class AttackCombat {
           column: target.column,
           row: target.row,
         },
+        secondaryTargets: hits.slice(1).map(({ candidate }) => ({
+          column: candidate.column,
+          row: candidate.row,
+        })),
         damage: targetDamage,
         effectiveness: targetMultiplier > 1 ? 'favored' : 'normal',
       });
