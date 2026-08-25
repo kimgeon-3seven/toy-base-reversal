@@ -3,6 +3,10 @@ import { DefenseEditor } from '../../application/DefenseEditor';
 import type { AudioSettingsService } from '../../application/AudioSettingsService';
 import { GamePauseState, type PauseOrigin } from '../../application/GamePauseState';
 import { PageActivityCoordinator } from '../../application/PageActivityCoordinator';
+import type {
+  ResultShareService,
+  ResultShareSummary,
+} from '../../application/ResultShareService';
 import type { GameRecordService } from '../../application/GameRecordService';
 import type {
   LeaderboardResult,
@@ -94,6 +98,7 @@ import { RoundResultOverlay } from '../ui/RoundResultOverlay';
 import { BattleFeedbackAdvisor } from '../models/BattleFeedbackAdvice';
 import { CoreLoopFeedbackPresenter } from '../models/CoreLoopFeedbackPresentation';
 import { AttackCombatFeedbackPolicy } from '../models/AttackCombatFeedbackPolicy';
+import { ResultExperiencePresenter } from '../models/ResultExperiencePresentation';
 import { IMAGE_ASSETS } from '../assets/GameAssets';
 import { CommanderAbilityPanel } from '../ui/CommanderAbilityPanel';
 import { TOY_UI } from '../ui/ToyUiTheme';
@@ -120,6 +125,10 @@ interface AttackFeedbackBeforeUpdate {
   readonly focusTargetId: string | null;
   readonly focusTargetName: string;
   readonly focusTargetPosition: GridPosition | null;
+}
+
+interface BattlefieldSceneData {
+  readonly startImmediately?: boolean;
 }
 
 export class BattlefieldScene extends Phaser.Scene {
@@ -163,6 +172,7 @@ export class BattlefieldScene extends Phaser.Scene {
   private playerRecord!: PlayerRecord;
   private recordResetArmedUntil = 0;
   private latestRecordNotice = '';
+  private resultShareSummary: ResultShareSummary | null = null;
   private leaderboardOverlay!: Phaser.GameObjects.Container;
   private leaderboardStatusText!: Phaser.GameObjects.Text;
   private leaderboardRowsText!: Phaser.GameObjects.Text;
@@ -190,6 +200,7 @@ export class BattlefieldScene extends Phaser.Scene {
   private readonly feedbackAdvisor = new BattleFeedbackAdvisor();
   private readonly coreLoopFeedbackPresenter = new CoreLoopFeedbackPresenter();
   private readonly attackCombatFeedbackPolicy = new AttackCombatFeedbackPolicy();
+  private readonly resultExperiencePresenter = new ResultExperiencePresenter();
   private readonly phaseUiPolicy = new BattlefieldPhaseUiPolicy();
   private commanderMoveKeys!: {
     up: Phaser.Input.Keyboard.Key;
@@ -205,11 +216,12 @@ export class BattlefieldScene extends Phaser.Scene {
     private readonly firstRunGuideService: FirstRunGuideService,
     private readonly audioSettingsService: AudioSettingsService,
     private readonly pageActivityMonitor: PageActivityMonitor,
+    private readonly resultShareService: ResultShareService,
   ) {
     super({ key: 'BattlefieldScene' });
   }
 
-  public create(): void {
+  public create(data: BattlefieldSceneData = {}): void {
     this.pageActivityCoordinator?.stop();
     this.pageActivityCoordinator = null;
     this.audioControlPanel = null;
@@ -223,6 +235,7 @@ export class BattlefieldScene extends Phaser.Scene {
     this.playerRecord = this.gameRecordService.record;
     this.recordResetArmedUntil = 0;
     this.latestRecordNotice = '';
+    this.resultShareSummary = null;
     this.isLeaderboardOpen = false;
     this.isNicknameDialogOpen = false;
     this.leaderboardRequestId = 0;
@@ -307,7 +320,12 @@ export class BattlefieldScene extends Phaser.Scene {
     this.configureKeyboardInput();
     this.renderBattlefield();
     this.renderOpening();
-    this.setStatus('Enter를 눌러 장난감 전쟁을 시작하세요.');
+    if (data.startImmediately === true) {
+      this.startFromOpening();
+      this.setStatus('새 도전을 바로 시작했습니다. 방어선을 준비하세요.');
+    } else {
+      this.setStatus('Enter를 눌러 장난감 전쟁을 시작하세요.');
+    }
   }
 
   public update(_time: number, delta: number): void {
@@ -844,9 +862,9 @@ export class BattlefieldScene extends Phaser.Scene {
       metrics: ['방금 지킨 설계를 최대 체력으로 복원했습니다.'],
       progress: loopFeedback.progress,
       reward: `${loopFeedback.bridgeMessage}\n${reward.breakdown}`,
-      advice: '같은 타워 배치를 분석해 부대를 편성하고 적 코어를 파괴하세요.',
-      primaryAction: '[Enter] 바로 공격 준비',
-      secondaryAction: '잠시 후 자동으로 진행됩니다.',
+      advice:
+        '같은 타워 배치를 분석해 부대를 편성하고 적 코어를 파괴하세요.\n잠시 후 자동으로 진행됩니다.',
+      primaryAction: '바로 공격 준비',
       tone: 'transition',
       onPrimary: () => this.startAttackPreparation(),
     });
@@ -1037,12 +1055,12 @@ export class BattlefieldScene extends Phaser.Scene {
     this.input.keyboard?.on('keydown-R', () => {
       if (this.phase === 'attack-result') {
         if (this.attackCombat?.state === 'lost') {
-          this.restartCampaign();
+          this.retryCampaign();
         }
         return;
       }
       if (this.phase === 'campaign-complete') {
-        this.restartCampaign();
+        this.retryCampaign();
         return;
       }
       if (this.phase === 'result') {
@@ -1050,7 +1068,7 @@ export class BattlefieldScene extends Phaser.Scene {
           this.roundSession.isChallengeMode &&
           this.combat?.state === 'lost'
         ) {
-          this.restartCampaign();
+          this.retryCampaign();
         } else {
           this.resetToPreparation();
         }
@@ -2329,34 +2347,43 @@ export class BattlefieldScene extends Phaser.Scene {
       survivingStructures: this.editor.battlefield.structures.length,
       startingStructures: this.defenseStructureCountAtStart,
     });
+    const defenseMetric = `처치 ${this.combat.killCount} · 누수 ${this.combat.leakCount} · 코어 ${this.combat.coreHealth}/${this.combat.config.coreMaxHealth}`;
+    this.setResultShareSummary(
+      `${won ? '방어 성공' : '방어 실패'} · ${this.roundName()}`,
+      [
+        defenseMetric,
+        ...(rewardPresentation === null ? [] : [rewardPresentation.headline]),
+      ],
+    );
     this.resultOverlay.show({
       eyebrow: `방어 결과 · ${this.roundName()}`,
-      title: won ? '방어 성공' : '방어 실패',
-      metrics: [
-        `처치 ${this.combat.killCount} · 누수 ${this.combat.leakCount} · 코어 ${this.combat.coreHealth}/${this.combat.config.coreMaxHealth}`,
-      ],
+      title: won ? '방어 성공' : '코어가 파괴됐습니다',
+      metrics: [defenseMetric],
       progress: loopFeedback?.progress,
       reward:
         rewardPresentation === null
           ? undefined
           : `${rewardPresentation.headline}\n${rewardPresentation.breakdown}`,
-      advice: `${defenseAdvice}\n${this.defenseStandoutText()}${rewardPresentation === null ? '' : `\n${rewardPresentation.strategyMessage}`}`,
+      advice: `${defenseAdvice}\n${this.defenseStandoutText()}${rewardPresentation === null ? '' : `\n${rewardPresentation.strategyMessage}`}${loopFeedback === null ? '' : `\n${loopFeedback.bridgeMessage}`}`,
       primaryAction: won
         ? this.roundSession.currentRound === 1 && !this.roundSession.isChallengeMode
-          ? '[Enter] 역할 반전'
-          : '[Enter] 내 기지 공략'
+          ? '역할 반전 시작'
+          : '내 기지 공략'
         : this.roundSession.isChallengeMode
-          ? '[R] 처음부터 다시 시작'
-          : '[R] 설계로 돌아가기',
-      secondaryAction: loopFeedback?.bridgeMessage,
+          ? '새 게임 바로 시작'
+          : '설계 수정하기',
+      secondaryAction: won ? undefined : '시작 화면으로',
+      utilityAction: '결과 복사',
       tone: won ? 'success' : 'failure',
       onPrimary: won
         ? this.roundSession.currentRound === 1 && !this.roundSession.isChallengeMode
           ? () => this.showRoleReversal()
           : () => this.startAttackPreparation()
         : this.roundSession.isChallengeMode
-          ? () => this.restartCampaign()
+          ? () => this.retryCampaign()
           : () => this.resetToPreparation(),
+      onSecondary: won ? undefined : () => this.returnToOpening(),
+      onUtility: () => void this.copyResultSummary(),
     });
     this.setStatus(
       won
@@ -2468,10 +2495,12 @@ export class BattlefieldScene extends Phaser.Scene {
     this.firstRunGuideService.markCompleted();
     this.hideGuideCoachMark();
     const won = this.attackCombat.state === 'won';
+    const previousChallengeBest = this.playerRecord.challengeBest;
     const completedRound = won
       ? this.roundSession.recordAttackVictory(this.attackCombat.elapsedTimeMs)
       : null;
     this.latestRecordNotice = '';
+    let isChallengeNewBest = false;
     if (
       won &&
       completedRound !== null &&
@@ -2482,17 +2511,24 @@ export class BattlefieldScene extends Phaser.Scene {
         completedRound.attackTimeMs,
       );
       this.playerRecord = recordUpdate.record;
+      isChallengeNewBest = recordUpdate.isNewBest;
       this.latestRecordNotice = recordUpdate.isNewBest
         ? '신기록! 개인 최고 기록을 브라우저에 저장했습니다.'
         : `개인 최고: ${this.challengeBestText()}`;
       if (recordUpdate.isNewBest) void this.submitCurrentChallengeBest();
     }
-    const failure =
-      this.attackCombat.failureReason === 'commander-defeated'
-        ? '지휘관 전투 불능'
-        : this.attackCombat.failureReason === 'squad-defeated'
-          ? '일반 부대 전멸'
-          : '제한시간 초과';
+    const failurePresentation = this.resultExperiencePresenter.presentAttackFailure(
+      this.attackCombat.failureReason,
+    );
+    const challengeComparison =
+      won && completedRound !== null && this.roundSession.isChallengeMode
+        ? this.resultExperiencePresenter.compareChallengeRecord(
+            this.roundSession.challengeRound,
+            completedRound.attackTimeMs,
+            previousChallengeBest,
+            isChallengeNewBest,
+          )
+        : '';
     const recordOrUnlock = this.roundSession.isChallengeMode
       ? this.latestRecordNotice || this.challengeRecordText()
       : won
@@ -2510,29 +2546,45 @@ export class BattlefieldScene extends Phaser.Scene {
         ? undefined
         : this.coreLoopFeedbackPresenter.presentDefense(completedRound.defense)
             .progress;
+    const attackMetrics =
+      completionPresentation === null
+        ? [failurePresentation.cause]
+        : completionPresentation.comparison;
+    this.setResultShareSummary(
+      `${won ? '공략 성공' : '공격 실패'} · ${this.roundName()}`,
+      [
+        ...attackMetrics,
+        ...(won
+          ? [`누적 공격 시간 ${this.formatTime(this.roundSession.totalAttackTimeMs)}`]
+          : []),
+        ...(challengeComparison.length === 0 ? [] : [challengeComparison]),
+      ],
+    );
     this.resultOverlay.show({
       eyebrow: `공격 결과 · ${this.roundName()}`,
-      title: completionPresentation?.title ?? '공격 실패',
-      metrics:
-        completionPresentation === null
-          ? [`실패 원인 · ${failure}`]
-          : completionPresentation.comparison,
+      title: completionPresentation?.title ?? failurePresentation.title,
+      metrics: attackMetrics,
       progress: completionProgress,
       reward: won
         ? `누적 공격 시간 ${this.formatTime(this.roundSession.totalAttackTimeMs)}`
         : undefined,
       advice:
         completionPresentation === null
-          ? this.feedbackAdvisor.forAttack(false, this.attackCombat.failureReason)
-          : `${completionPresentation.conclusion}${recordOrUnlock.length === 0 ? '' : `\n${recordOrUnlock}`}`,
-      primaryAction: won ? '[Enter] 다음 라운드' : '[R] 처음부터 다시 시작',
-      secondaryAction: won
-        ? '방어 성과로 만든 부대가 같은 방어선을 돌파했습니다.'
-        : undefined,
+          ? failurePresentation.recovery
+          : `${completionPresentation.conclusion}\n방어 성과로 만든 부대가 같은 방어선을 돌파했습니다.${recordOrUnlock.length === 0 ? '' : `\n${recordOrUnlock}`}${challengeComparison.length === 0 ? '' : `\n${challengeComparison}`}`,
+      primaryAction: won
+        ? this.roundSession.isNormalModeComplete && !this.roundSession.isChallengeMode
+          ? '최종 기록 보기'
+          : '다음 라운드'
+        : '새 게임 바로 시작',
+      secondaryAction: won ? undefined : '시작 화면으로',
+      utilityAction: '결과 복사',
       tone: won ? 'success' : 'failure',
       onPrimary: won
         ? () => this.continueAfterAttackVictory()
-        : () => this.restartCampaign(),
+        : () => this.retryCampaign(),
+      onSecondary: won ? undefined : () => this.returnToOpening(),
+      onUtility: () => void this.copyResultSummary(),
     });
     this.setStatus(
       won
@@ -2624,6 +2676,7 @@ export class BattlefieldScene extends Phaser.Scene {
   }
 
   private showCampaignComplete(): void {
+    const previousNormalBest = this.playerRecord.normalBest;
     const recordUpdate = this.gameRecordService.recordNormalCompletion(
       this.roundSession.totalAttackTimeMs,
     );
@@ -2631,30 +2684,65 @@ export class BattlefieldScene extends Phaser.Scene {
     this.latestRecordNotice = recordUpdate.isNewBest
       ? '신기록! 개인 최고 기록을 브라우저에 저장했습니다.'
       : `개인 최고 ${this.normalBestText()}`;
+    const recordComparison = this.resultExperiencePresenter.compareNormalRecord(
+      this.roundSession.totalAttackTimeMs,
+      previousNormalBest?.totalAttackTimeMs ?? null,
+      recordUpdate.isNewBest,
+    );
     this.phase = 'campaign-complete';
+    this.setResultShareSummary('일반 모드 5라운드 완료', [
+      `누적 돌파 시간 ${this.formatTime(this.roundSession.totalAttackTimeMs)}`,
+      recordComparison,
+      `플레이어 ${this.playerRecord.playerName}`,
+    ]);
     this.resultOverlay.show({
       eyebrow: '일반 모드 · 5라운드 완료',
       title: '장난감 전쟁은 끝나지 않았다',
       metrics: [
         `누적 돌파 시간 ${this.formatTime(this.roundSession.totalAttackTimeMs)}`,
-        this.latestRecordNotice,
+        recordComparison,
         `기록일 ${this.normalBestDateText()}`,
       ],
       reward: '부모님: “밥 먹자!”',
       advice: '아이가 방을 나가자, 장난감들이 스스로 움직이며 계속 싸우기 시작합니다.',
-      primaryAction: '[Enter] 챌린지 모드 시작',
-      secondaryAction: '[R] 일반 모드 다시 시작',
+      primaryAction: '챌린지 모드 시작',
+      secondaryAction: '일반 모드 바로 시작',
+      utilityAction: '결과 복사',
       tone: 'transition',
       onPrimary: () => this.startChallengeMode(),
-      onSecondary: () => this.restartCampaign(),
+      onSecondary: () => this.retryCampaign(),
+      onUtility: () => void this.copyResultSummary(),
     });
     this.setStatus('부모님의 식사 호출에 아이가 방을 나갑니다. 장난감들이 스스로 움직이기 시작합니다.');
     this.updatePhaseInterface();
     this.renderBattlefield();
   }
 
-  private restartCampaign(): void {
+  private retryCampaign(): void {
+    this.scene.restart({ startImmediately: true } satisfies BattlefieldSceneData);
+  }
+
+  private returnToOpening(): void {
     this.scene.restart();
+  }
+
+  private setResultShareSummary(title: string, lines: readonly string[]): void {
+    this.resultShareSummary = { title, lines };
+  }
+
+  private async copyResultSummary(): Promise<void> {
+    if (this.resultShareSummary === null) return;
+    const copied = await this.resultShareService.copy(this.resultShareSummary);
+    this.resultOverlay.setUtilityFeedback(
+      copied ? '복사 완료 ✓' : '복사할 수 없음',
+      copied,
+    );
+    this.setStatus(
+      copied
+        ? '결과와 게임 주소를 클립보드에 복사했습니다.'
+        : '브라우저가 클립보드 복사를 허용하지 않았습니다.',
+      !copied,
+    );
   }
 
   private formatTime(milliseconds: number): string {

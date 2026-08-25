@@ -83,12 +83,12 @@ export class BattlefieldPhaseUiPolicy {
       case 'attack-result':
         return {
           ...PASSIVE_LAYOUT,
-          controls: 'Enter · 다음 단계  |  R · 처음부터 다시 시작',
+          controls: '화면 버튼 · 다음 단계/재도전  |  Enter/R · 단축키',
         };
       case 'campaign-complete':
         return {
           ...PASSIVE_LAYOUT,
-          controls: 'Enter · 챌린지 시작  |  R · 일반 모드 다시 시작',
+          controls: '화면 버튼 · 챌린지/일반 모드 선택  |  Enter/R · 단축키',
         };
     }
   }
