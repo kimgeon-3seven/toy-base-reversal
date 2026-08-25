@@ -9,8 +9,10 @@ import type { DefenseEnemy } from '../../domain/combat/DefenseEnemy';
 import type { DefenseStructure } from '../../domain/structures/DefenseStructure';
 import {
   GRID_CELL_SIZE,
+  GRID_COLUMNS,
   GRID_OFFSET_X,
   GRID_OFFSET_Y,
+  GRID_ROWS,
 } from '../../config/BattlefieldConfig';
 import { IMAGE_ASSETS } from '../assets/GameAssets';
 import {
@@ -24,6 +26,9 @@ import {
   ObstacleVisualPolicy,
   type ObstacleVisualState,
 } from './ObstacleVisualPolicy';
+import { SpriteVisualBoundary } from './SpriteVisualBoundary';
+
+const COMMANDER_DISPLAY_SIZE = 76;
 
 interface SpriteDescriptor extends BattlefieldSpriteState {
   readonly id: string;
@@ -34,6 +39,12 @@ export class BattlefieldSpriteRenderer {
   private readonly animationCatalog = new DirectionalAnimationCatalog();
   private readonly facingProfile = new SpriteFacingProfile();
   private readonly obstacleVisualPolicy = new ObstacleVisualPolicy();
+  private readonly visualBoundary = new SpriteVisualBoundary(
+    GRID_OFFSET_X,
+    GRID_OFFSET_Y,
+    GRID_COLUMNS * GRID_CELL_SIZE,
+    GRID_ROWS * GRID_CELL_SIZE,
+  );
   private readonly structures = new Map<string, BattlefieldSpriteView>();
   private readonly defenders = new Map<string, BattlefieldSpriteView>();
   private readonly attackers = new Map<string, BattlefieldSpriteView>();
@@ -205,12 +216,20 @@ export class BattlefieldSpriteRenderer {
       return;
     }
 
-    const point = this.toWorld(commander.position.column, commander.position.row);
+    const gridPoint = this.toWorld(
+      commander.position.column,
+      commander.position.row,
+    );
+    const point = this.visualBoundary.constrainCenter(
+      gridPoint,
+      COMMANDER_DISPLAY_SIZE,
+      COMMANDER_DISPLAY_SIZE,
+    );
     const state: BattlefieldSpriteState = {
       texture: IMAGE_ASSETS.commander,
       x: point.x,
       y: point.y,
-      displaySize: 76,
+      displaySize: COMMANDER_DISPLAY_SIZE,
       depth: 17,
       baseColor: 0xf2b544,
       baseScale: 0.78,
