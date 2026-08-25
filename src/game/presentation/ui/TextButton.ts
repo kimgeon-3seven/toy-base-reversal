@@ -1,5 +1,9 @@
 import type Phaser from 'phaser';
 import { TOY_UI } from './ToyUiTheme';
+import {
+  emitUiButtonFeedback,
+  type UiButtonFeedbackTone,
+} from './UiButtonFeedbackEvent';
 
 export interface TextButtonColors {
   readonly fill: number;
@@ -32,6 +36,7 @@ export class TextButton {
     label: string,
     onClick: () => void,
     private readonly colors: TextButtonColors = DEFAULT_COLORS,
+    private readonly feedbackTone: UiButtonFeedbackTone = 'click',
   ) {
     this.shadow = scene.add.rectangle(4, 5, width, height, TOY_UI.shadow, 0.42);
     this.background = scene.add
@@ -61,7 +66,9 @@ export class TextButton {
         event: Phaser.Types.Input.EventData,
       ) => {
         event.stopPropagation();
-        if (this.enabled) onClick();
+        if (!this.enabled) return;
+        emitUiButtonFeedback(scene, this.feedbackTone);
+        onClick();
       },
     );
     this.background.on('pointerover', () => {

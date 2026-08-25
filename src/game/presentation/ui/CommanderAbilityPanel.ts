@@ -1,5 +1,6 @@
 import Phaser from 'phaser';
 import { TOY_UI, ToyUiFactory } from './ToyUiTheme';
+import { emitUiButtonFeedback } from './UiButtonFeedbackEvent';
 
 export type CommanderAbilityState =
   | 'ready'
@@ -35,8 +36,8 @@ export class CommanderAbilityPanel {
 
   public constructor(
     scene: Phaser.Scene,
-    onFocus: () => void,
-    onDisrupt: () => void,
+    onFocus: () => boolean,
+    onDisrupt: () => boolean,
   ) {
     const ui = new ToyUiFactory(scene);
     const panel = ui.createPaperPanel(264, 78, {
@@ -85,7 +86,7 @@ export class CommanderAbilityPanel {
     keyLabel: string,
     nameLabel: string,
     color: number,
-    onClick: () => void,
+    onClick: () => boolean,
   ): AbilityCard {
     const background = scene.add
       .rectangle(x, y, 122, 58, 0xf0dfb8, 0.98)
@@ -101,7 +102,7 @@ export class CommanderAbilityPanel {
           event: Phaser.Types.Input.EventData,
         ) => {
           event.stopPropagation();
-          onClick();
+          if (onClick()) emitUiButtonFeedback(scene, 'click');
         },
       );
     const key = scene.add
