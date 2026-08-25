@@ -53,6 +53,14 @@ export class BattlefieldEffects {
     }
   }
 
+  public playStrategicCallout(
+    position: CombatPoint,
+    message: string,
+    color = '#fff0a8',
+  ): void {
+    this.playCallout(position, message, color);
+  }
+
   public playAbility(position: CombatPoint, kind: 'focus' | 'disrupt'): void {
     const point = this.toWorld(position);
     const burst = this.scene.add

@@ -52,11 +52,11 @@ export class MissionPanel {
     });
 
     const divider = scene.add.rectangle(132, 124, 226, 2, TOY_UI.paperDark, 1);
-    const statViews = Array.from({ length: 3 }, (_, index) =>
-      scene.add.text(20, 139 + index * 25, '', {
+    const statViews = Array.from({ length: 4 }, (_, index) =>
+      scene.add.text(20, 136 + index * 21, '', {
         color: TOY_UI.ink,
         fontFamily: TOY_UI.fontFamily,
-        fontSize: index === 0 ? '15px' : '13px',
+        fontSize: index === 0 ? '14px' : '12px',
         fontStyle: 'bold',
         wordWrap: { width: 226 },
       }),
