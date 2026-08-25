@@ -167,6 +167,7 @@ export class RoundResultOverlay {
         stroke: TOY_UI.tealDark,
         text: '#fffdf3',
       },
+      'confirm',
     );
     this.secondaryAction = new TextButton(
       scene,
@@ -176,6 +177,8 @@ export class RoundResultOverlay {
       38,
       '',
       () => this.onSecondary?.(),
+      undefined,
+      'confirm',
     );
     this.utilityAction = new TextButton(
       scene,

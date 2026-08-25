@@ -114,6 +114,7 @@ export class AttackFormationDeck {
         stroke: TOY_UI.tealDark,
         text: '#f4fffb',
       },
+      'silent',
     );
     buttons.push(recommendButton, clearButton, this.startButton);
 

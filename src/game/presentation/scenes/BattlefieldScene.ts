@@ -85,6 +85,10 @@ import type { CombatEvent } from '../../domain/combat/CombatEvent';
 import { BattlefieldSpriteRenderer } from '../rendering/BattlefieldSpriteRenderer';
 import { BattlefieldEffects } from '../effects/BattlefieldEffects';
 import { BattlefieldAudioDirector } from '../audio/BattlefieldAudioDirector';
+import {
+  PhaserUiButtonFeedbackSource,
+  UiButtonAudioFeedback,
+} from '../audio/UiButtonAudioFeedback';
 import { BattlefieldBackdropRenderer } from '../rendering/BattlefieldBackdropRenderer';
 import { AudioControlPanel } from '../ui/AudioControlPanel';
 import { PauseMenu } from '../ui/PauseMenu';
@@ -144,6 +148,7 @@ export class BattlefieldScene extends Phaser.Scene {
   private spriteRenderer!: BattlefieldSpriteRenderer;
   private effects!: BattlefieldEffects;
   private audioDirector!: BattlefieldAudioDirector;
+  private uiButtonAudioFeedback: UiButtonAudioFeedback | null = null;
   private audioControlPanel: AudioControlPanel | null = null;
   private pauseMenu: PauseMenu | null = null;
   private pageActivityCoordinator: PageActivityCoordinator | null = null;
@@ -222,6 +227,8 @@ export class BattlefieldScene extends Phaser.Scene {
   }
 
   public create(data: BattlefieldSceneData = {}): void {
+    this.uiButtonAudioFeedback?.stop();
+    this.uiButtonAudioFeedback = null;
     this.pageActivityCoordinator?.stop();
     this.pageActivityCoordinator = null;
     this.audioControlPanel = null;
@@ -279,6 +286,15 @@ export class BattlefieldScene extends Phaser.Scene {
       this,
       this.audioSettingsService,
     );
+    this.uiButtonAudioFeedback = new UiButtonAudioFeedback(
+      new PhaserUiButtonFeedbackSource(this),
+      this.audioDirector,
+    );
+    this.uiButtonAudioFeedback.start();
+    this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
+      this.uiButtonAudioFeedback?.stop();
+      this.uiButtonAudioFeedback = null;
+    });
     this.createStaticInterface();
     new BattlefieldBackdropRenderer(this);
     this.pathGraphics = this.add.graphics();
@@ -648,6 +664,7 @@ export class BattlefieldScene extends Phaser.Scene {
         stroke: TOY_UI.tealDark,
         text: '#fff7df',
       },
+      'confirm',
     );
 
     this.tutorialOverlay = this.add
@@ -1535,18 +1552,18 @@ export class BattlefieldScene extends Phaser.Scene {
     this.renderBattlefield();
   }
 
-  private beginFocusTargeting(): void {
-    if (this.phase !== 'attack-combat') return;
+  private beginFocusTargeting(): boolean {
+    if (this.phase !== 'attack-combat') return false;
     if (this.isFocusTargeting) {
       this.isFocusTargeting = false;
       this.setStatus('집중 공격 대상 선택을 취소했습니다.');
       this.updatePhaseInterface();
       this.renderBattlefield();
-      return;
+      return true;
     }
     if (this.attackCombat?.canIssueFocusFire !== true) {
       this.setStatus('집중 공격 재사용 대기 중입니다.', true);
-      return;
+      return false;
     }
     this.isDisruptTargeting = false;
     this.isFocusTargeting = true;
@@ -1555,20 +1572,21 @@ export class BattlefieldScene extends Phaser.Scene {
     );
     this.updatePhaseInterface();
     this.renderBattlefield();
+    return true;
   }
 
-  private beginDisruptTargeting(): void {
-    if (this.phase !== 'attack-combat') return;
+  private beginDisruptTargeting(): boolean {
+    if (this.phase !== 'attack-combat') return false;
     if (this.isDisruptTargeting) {
       this.isDisruptTargeting = false;
       this.setStatus('교란 대상 선택을 취소했습니다.');
       this.updatePhaseInterface();
       this.renderBattlefield();
-      return;
+      return true;
     }
     if (this.attackCombat?.canIssueDisrupt !== true) {
       this.setStatus('교란 재사용 대기 중입니다.', true);
-      return;
+      return false;
     }
     this.isFocusTargeting = false;
     this.isDisruptTargeting = true;
@@ -1577,6 +1595,7 @@ export class BattlefieldScene extends Phaser.Scene {
     );
     this.updatePhaseInterface();
     this.renderBattlefield();
+    return true;
   }
 
   private handleDisruptTargetPointer(pointer: Phaser.Input.Pointer): void {

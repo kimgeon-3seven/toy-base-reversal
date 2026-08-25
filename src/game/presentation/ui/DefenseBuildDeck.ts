@@ -148,6 +148,7 @@ export class DefenseBuildDeck {
         stroke: TOY_UI.coralDark,
         text: '#fff7df',
       },
+      'silent',
     );
 
     buttons.push(

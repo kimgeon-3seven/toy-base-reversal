@@ -129,6 +129,7 @@ export class PauseMenu {
         stroke: TOY_UI.coralDark,
         text: '#fff2f4',
       },
+      'confirm',
     );
     this.cancelButton = new TextButton(
       scene,
