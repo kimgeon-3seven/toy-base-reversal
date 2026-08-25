@@ -13,8 +13,12 @@ import {
   CHALLENGE_STARTING_WAVE_COUNT,
 } from './ChallengeModeConfig';
 import { createPrototypeTowerUpgradePolicy } from './TowerUpgradeConfig';
+import {
+  ROUND_ONBOARDING_POLICY,
+  STANDARD_DEFENSE_PREPARATION_DURATION_MS,
+} from './RoundOnboardingConfig';
 
-export const PREPARATION_DURATION_MS = 30_000;
+export const PREPARATION_DURATION_MS = STANDARD_DEFENSE_PREPARATION_DURATION_MS;
 export const NORMAL_MODE_WAVE_COUNT_BY_ROUND = [3, 4, 5, 6, 7] as const;
 export const ENEMY_HEALTH_BONUS_PER_ROUND = 4;
 export const ENEMY_DAMAGE_BONUS_INTERVAL_ROUNDS = 2;
@@ -96,6 +100,10 @@ export function createPrototypeDefenseWave(roundNumber = 1): DefenseWave {
   const difficultyStep = Math.max(0, roundNumber - 1);
   const challengeRound = challengeRoundFor(roundNumber);
   const waveCount = defenseWaveCountForRound(roundNumber);
+  const onboarding = ROUND_ONBOARDING_POLICY.resolve(
+    roundNumber,
+    challengeRound > 0,
+  );
   const finalNormalDifficultyStep = NORMAL_MODE_WAVE_COUNT_BY_ROUND.length - 1;
   const healthBonus =
     Math.min(difficultyStep, finalNormalDifficultyStep) *
@@ -119,7 +127,9 @@ export function createPrototypeDefenseWave(roundNumber = 1): DefenseWave {
       for (let copyIndex = 0; copyIndex < copies; copyIndex += 1) {
         spawns.push({
           delayMs:
-            waveIndex * 1_750 + entryIndex * 260 + copyIndex * 180,
+            waveIndex * onboarding.defenseSpawnIntervalMs +
+            entryIndex * 260 +
+            copyIndex * 180,
           entryIndex,
           stats: {
             ...baseStats,
@@ -136,6 +146,13 @@ export function createPrototypeDefenseWave(roundNumber = 1): DefenseWave {
 
 export function defenseWaveCountForRound(roundNumber: number): number {
   const challengeRound = challengeRoundFor(roundNumber);
+  const onboarding = ROUND_ONBOARDING_POLICY.resolve(
+    roundNumber,
+    challengeRound > 0,
+  );
+  if (onboarding.defenseWaveCountOverride !== null) {
+    return onboarding.defenseWaveCountOverride;
+  }
   if (challengeRound > 0) {
     return Math.min(
       CHALLENGE_MAX_WAVE_COUNT,

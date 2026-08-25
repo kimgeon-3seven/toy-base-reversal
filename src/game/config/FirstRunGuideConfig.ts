@@ -11,13 +11,13 @@ const CONTEXTUAL_PROMPTS: Partial<
 > = {
   'defense-preparation': {
     label: '1/4 · 설계',
-    title: '기지는 이미 준비됐습니다',
-    body: '타워를 하나 확인한 뒤 [Space]로 방어를 시작하세요.',
+    title: '빛나는 칸만 확인하세요',
+    body: '기본 방어선은 완성됐습니다. 팝건 1개 또는 블록 벽 2개를 놓고 방어 시작을 누르세요.',
   },
   'defense-combat': {
     label: '2/4 · 방어',
-    title: '새는 진입로를 확인하세요',
-    body: '코어에 도착한 적은 비용에 따라 누수 피해를 줍니다.',
+    title: '첫 웨이브는 짧게 진행됩니다',
+    body: '타워는 자동 공격합니다. 코어가 살아남으면 곧바로 역할이 뒤집힙니다.',
   },
   'attack-preparation': {
     label: '4/4 · 공략 준비',

@@ -22,15 +22,18 @@ describe('prototype round progression', () => {
 
   it('summarizes the incoming wave for the strategy panel', () => {
     expect(defenseWavePreviewForRound(1)).toEqual({
-      totalEnemies: 9,
-      archetypeCounts: { tank: 9, swarm: 0, ranger: 0 },
-      laneCounts: [3, 3, 3],
+      totalEnemies: 6,
+      archetypeCounts: { tank: 6, swarm: 0, ranger: 0 },
+      laneCounts: [2, 2, 2],
     });
     expect(defenseWavePreviewForRound(2)).toEqual({
       totalEnemies: 18,
       archetypeCounts: { tank: 6, swarm: 12, ranger: 0 },
       laneCounts: [6, 6, 6],
     });
+    expect(
+      Math.max(...createPrototypeDefenseWave(1).spawns.map((spawn) => spawn.delayMs)),
+    ).toBeLessThan(2_000);
   });
 
   it('raises both attack resources and target durability', () => {
@@ -51,8 +54,8 @@ describe('prototype round progression', () => {
     const sixthWave = createPrototypeDefenseWave(6);
     const twentiethWave = createPrototypeDefenseWave(20);
 
-    expect([5, 6, 7, 10, 11, 20].map(defenseWaveCountForRound)).toEqual([
-      7, 8, 9, 12, 12, 12,
+    expect([1, 5, 6, 7, 10, 11, 20].map(defenseWaveCountForRound)).toEqual([
+      2, 7, 8, 9, 12, 12, 12,
     ]);
     expect(sixthWave.spawns[0]?.stats.maxHealth).toBeGreaterThan(
       fifthWave.spawns[0]?.stats.maxHealth ?? 0,

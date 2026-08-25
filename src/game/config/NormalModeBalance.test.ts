@@ -164,12 +164,12 @@ function runNormalModeBaseline(): readonly RoundBalanceResult[] {
 }
 
 describe('normal mode balance baseline', () => {
-  it('keeps the first untouched defense within the tutorial target band', () => {
-    const firstRound = runNormalModeBaseline()[0];
+  it('lets the prepared first defense survive the shortened tutorial wave', () => {
+    const firstRound = simulateDefense(createScenarioEditor(), 1);
 
-    expect(firstRound?.defenseWon).toBe(true);
-    expect(firstRound?.remainingCoreHealth).toBeGreaterThanOrEqual(30);
-    expect(firstRound?.remainingCoreHealth).toBeLessThanOrEqual(60);
+    expect(firstRound.state).toBe('won');
+    expect(firstRound.coreHealth).toBeGreaterThanOrEqual(90);
+    expect(firstRound.coreHealth).toBeLessThanOrEqual(120);
   });
 
   it('keeps the standard progression viable through all five rounds', () => {
