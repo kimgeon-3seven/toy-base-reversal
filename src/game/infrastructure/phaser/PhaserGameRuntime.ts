@@ -3,6 +3,7 @@ import { AudioSettingsService } from '../../application/AudioSettingsService';
 import { FirstRunGuideService } from '../../application/FirstRunGuideService';
 import { GameRecordService } from '../../application/GameRecordService';
 import { LeaderboardService } from '../../application/LeaderboardService';
+import type { ResultShareService } from '../../application/ResultShareService';
 import { GAME_HEIGHT, GAME_WIDTH } from '../../config/GameConfig';
 import type { GameRuntime } from '../../ports/GameRuntime';
 import type { PageActivityMonitor } from '../../ports/PageActivityMonitor';
@@ -23,6 +24,7 @@ export class PhaserGameRuntime implements GameRuntime {
     private readonly parentId: string,
     private readonly webEntry: WebEntryFlow,
     private readonly pageActivityMonitor: PageActivityMonitor,
+    private readonly resultShareService: ResultShareService,
   ) {}
 
   public start(): void {
@@ -83,6 +85,7 @@ export class PhaserGameRuntime implements GameRuntime {
           firstRunGuideService,
           audioSettingsService,
           this.pageActivityMonitor,
+          this.resultShareService,
         ),
       ],
     });

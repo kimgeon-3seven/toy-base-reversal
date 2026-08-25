@@ -2,6 +2,7 @@ import type Phaser from 'phaser';
 import { GAME_HEIGHT, GAME_WIDTH } from '../../config/GameConfig';
 import { IMAGE_ASSETS } from '../assets/GameAssets';
 import type { CoreLoopProgressMetric } from '../models/CoreLoopFeedbackPresentation';
+import { TextButton } from './TextButton';
 import { TOY_UI } from './ToyUiTheme';
 
 export type RoundResultTone = 'success' | 'failure' | 'transition';
@@ -15,10 +16,12 @@ export interface RoundResultOverlayModel {
   readonly advice: string;
   readonly primaryAction: string;
   readonly secondaryAction?: string;
+  readonly utilityAction?: string;
   readonly tone: RoundResultTone;
   readonly animate?: boolean;
   readonly onPrimary?: () => void;
   readonly onSecondary?: () => void;
+  readonly onUtility?: () => void;
 }
 
 export class RoundResultOverlay {
@@ -37,11 +40,13 @@ export class RoundResultOverlay {
   }[];
   private readonly reward: Phaser.GameObjects.Text;
   private readonly advice: Phaser.GameObjects.Text;
-  private readonly primaryAction: Phaser.GameObjects.Text;
-  private readonly secondaryAction: Phaser.GameObjects.Text;
+  private readonly primaryAction: TextButton;
+  private readonly secondaryAction: TextButton;
+  private readonly utilityAction: TextButton;
   private revealTimer: Phaser.Time.TimerEvent | null = null;
   private onPrimary: (() => void) | null = null;
   private onSecondary: (() => void) | null = null;
+  private onUtility: (() => void) | null = null;
 
   public constructor(scene: Phaser.Scene) {
     this.scene = scene;
@@ -148,50 +153,43 @@ export class RoundResultOverlay {
         wordWrap: { width: 660 },
       })
       .setOrigin(0.5);
-    this.primaryAction = scene.add
-      .text(0, 168, '', {
-        align: 'center',
-        backgroundColor: '#159b8c',
-        color: '#fff7df',
-        fontFamily: TOY_UI.fontFamily,
-        fontSize: '19px',
-        fontStyle: 'bold',
-        padding: { x: 24, y: 13 },
-      })
-      .setOrigin(0.5)
-      .setInteractive({ useHandCursor: true });
-    this.secondaryAction = scene.add
-      .text(0, 220, '', {
-        align: 'center',
-        color: TOY_UI.mutedInk,
-        fontFamily: TOY_UI.fontFamily,
-        fontSize: '15px',
-      })
-      .setOrigin(0.5)
-      .setInteractive({ useHandCursor: true });
-
-    this.primaryAction.on(
-      'pointerdown',
-      (
-        _pointer: Phaser.Input.Pointer,
-        _localX: number,
-        _localY: number,
-        event: Phaser.Types.Input.EventData,
-      ) => {
-        event.stopPropagation();
-        this.onPrimary?.();
+    this.primaryAction = new TextButton(
+      scene,
+      0,
+      174,
+      310,
+      46,
+      '',
+      () => this.onPrimary?.(),
+      {
+        fill: TOY_UI.teal,
+        hover: 0x22b7a6,
+        stroke: TOY_UI.tealDark,
+        text: '#fffdf3',
       },
     );
-    this.secondaryAction.on(
-      'pointerdown',
-      (
-        _pointer: Phaser.Input.Pointer,
-        _localX: number,
-        _localY: number,
-        event: Phaser.Types.Input.EventData,
-      ) => {
-        event.stopPropagation();
-        this.onSecondary?.();
+    this.secondaryAction = new TextButton(
+      scene,
+      -155,
+      224,
+      280,
+      38,
+      '',
+      () => this.onSecondary?.(),
+    );
+    this.utilityAction = new TextButton(
+      scene,
+      155,
+      224,
+      280,
+      38,
+      '',
+      () => this.onUtility?.(),
+      {
+        fill: 0xe0d9ef,
+        hover: 0xf0eaff,
+        stroke: 0x796b9a,
+        text: '#403754',
       },
     );
 
@@ -214,8 +212,9 @@ export class RoundResultOverlay {
         ]),
         this.reward,
         this.advice,
-        this.primaryAction,
-        this.secondaryAction,
+        this.primaryAction.gameObject,
+        this.secondaryAction.gameObject,
+        this.utilityAction.gameObject,
       ])
       .setDepth(95)
       .setVisible(false);
@@ -225,6 +224,7 @@ export class RoundResultOverlay {
     this.cancelReveal();
     this.onPrimary = model.onPrimary ?? null;
     this.onSecondary = model.onSecondary ?? null;
+    this.onUtility = model.onUtility ?? null;
     const accent =
       model.tone === 'failure'
         ? 0xff7b8f
@@ -256,12 +256,20 @@ export class RoundResultOverlay {
     this.renderProgress(model.progress);
     this.reward.setText(model.reward ?? '').setVisible(model.reward !== undefined);
     this.advice.setText(model.advice);
-    this.primaryAction.setText(model.primaryAction);
-    this.secondaryAction
-      .setText(model.secondaryAction ?? '')
-      .setVisible(model.secondaryAction !== undefined);
-    if (model.onSecondary === undefined) this.secondaryAction.disableInteractive();
-    else this.secondaryAction.setInteractive({ useHandCursor: true });
+    this.primaryAction.setLabel(model.primaryAction);
+    this.primaryAction.setVisible(true);
+    this.primaryAction.setEnabled(model.onPrimary !== undefined);
+    const hasSecondaryAction =
+      model.secondaryAction !== undefined && model.onSecondary !== undefined;
+    this.secondaryAction.setLabel(model.secondaryAction ?? '');
+    this.secondaryAction.setVisible(hasSecondaryAction);
+    this.secondaryAction.setEnabled(hasSecondaryAction);
+    const hasUtilityAction =
+      model.utilityAction !== undefined && model.onUtility !== undefined;
+    this.utilityAction.setLabel(model.utilityAction ?? '');
+    this.utilityAction.setVisible(hasUtilityAction);
+    this.utilityAction.setEnabled(hasUtilityAction);
+    this.utilityAction.gameObject.setX(hasSecondaryAction ? 155 : 0);
     this.container.setVisible(true).setAlpha(1).setScale(1);
 
     if (model.animate === false) return;
@@ -269,8 +277,9 @@ export class RoundResultOverlay {
       this.metrics,
       ...(model.reward === undefined ? [] : [this.reward]),
       this.advice,
-      this.primaryAction,
-      ...(model.secondaryAction === undefined ? [] : [this.secondaryAction]),
+      this.primaryAction.gameObject,
+      ...(hasSecondaryAction ? [this.secondaryAction.gameObject] : []),
+      ...(hasUtilityAction ? [this.utilityAction.gameObject] : []),
     ];
     revealTargets.forEach((target) => target.setAlpha(0));
     this.container.setScale(0.96);
@@ -304,7 +313,13 @@ export class RoundResultOverlay {
     this.cancelReveal();
     this.onPrimary = null;
     this.onSecondary = null;
+    this.onUtility = null;
     this.container.setVisible(false);
+  }
+
+  public setUtilityFeedback(label: string, enabled = true): void {
+    this.utilityAction.setLabel(label);
+    this.utilityAction.setEnabled(enabled);
   }
 
   private cancelReveal(): void {
@@ -320,8 +335,9 @@ export class RoundResultOverlay {
     this.metrics.setY(visible ? -112 : -85).setFontSize(visible ? 18 : 21);
     this.reward.setY(visible ? 30 : 2);
     this.advice.setY(visible ? 101 : 84);
-    this.primaryAction.setY(visible ? 181 : 168);
-    this.secondaryAction.setY(visible ? 226 : 220);
+    this.primaryAction.gameObject.setY(visible ? 181 : 174);
+    this.secondaryAction.gameObject.setY(visible ? 226 : 224);
+    this.utilityAction.gameObject.setY(visible ? 226 : 224);
     this.progressRows.forEach((row, index) => {
       const metric = progress?.[index];
       const rowVisible = metric !== undefined;
