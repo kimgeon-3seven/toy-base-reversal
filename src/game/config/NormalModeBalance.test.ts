@@ -185,7 +185,10 @@ describe('normal mode balance baseline', () => {
         20_000,
         Math.floor((target?.minimum ?? 0) * 0.65),
       );
-      expect(result.attackTimeMs).toBeGreaterThanOrEqual(rewardedMinimum);
+      expect(
+        result.attackTimeMs,
+        `round ${result.round}: ${JSON.stringify(result)}`,
+      ).toBeGreaterThanOrEqual(rewardedMinimum);
       expect(result.attackTimeMs).toBeLessThanOrEqual(
         target?.maximum ?? Number.POSITIVE_INFINITY,
       );

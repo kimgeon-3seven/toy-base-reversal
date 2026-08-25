@@ -15,6 +15,18 @@ export const UNIT_NAMES: Readonly<Record<UnitArchetype, string>> = {
   ranger: '고무줄 사수',
 };
 
+export const TOWER_ROLE_SUMMARIES: Readonly<Record<TowerArchetype, string>> = {
+  popgun: '빠른 단일 공격',
+  mortar: '착탄점 주변 원형 범위 공격',
+  piercer: '발사선의 적 최대 3명 관통 (후속 피해 60%)',
+};
+
+export const UNIT_ROLE_SUMMARIES: Readonly<Record<UnitArchetype, string>> = {
+  tank: '튼튼한 전열 방어',
+  swarm: '저비용·고화력 물량 돌격',
+  ranger: '긴 사거리 후방 화력',
+};
+
 export const TOWER_COUNTER_TARGETS: Readonly<
   Record<TowerArchetype, UnitArchetype>
 > = {

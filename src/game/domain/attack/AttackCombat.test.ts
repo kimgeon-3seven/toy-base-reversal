@@ -48,19 +48,24 @@ const config: AttackCombatConfig = {
       rangeInCells: 3,
       damage: 50,
       attackIntervalMs: 100,
-      splashRadiusInCells: 0,
+      attackPattern: { kind: 'single' },
     },
     mortar: {
       rangeInCells: 3,
       damage: 50,
       attackIntervalMs: 100,
-      splashRadiusInCells: 1,
+      attackPattern: { kind: 'splash', radiusInCells: 1 },
     },
     piercer: {
       rangeInCells: 3,
       damage: 50,
       attackIntervalMs: 100,
-      splashRadiusInCells: 0,
+      attackPattern: {
+        kind: 'pierce',
+        maxTargets: 3,
+        secondaryDamageMultiplier: 0.6,
+        corridorWidthInCells: 0.4,
+      },
     },
   },
   commander: {

@@ -19,6 +19,7 @@ export type CombatEvent =
       readonly sourceId: string;
       readonly source: CombatPoint;
       readonly target: CombatPoint;
+      readonly secondaryTargets?: readonly CombatPoint[];
       readonly damage: number;
       readonly effectiveness: CombatHitEffectiveness;
     }

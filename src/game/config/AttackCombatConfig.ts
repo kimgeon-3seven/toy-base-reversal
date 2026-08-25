@@ -11,7 +11,7 @@ export const NORMAL_MODE_CORE_HEALTH_BY_ROUND = [
   650,
   650,
   1_500,
-  1_600,
+  2_150,
   2_900,
 ] as const;
 
@@ -36,7 +36,7 @@ export const PROTOTYPE_ATTACK_COMBAT_CONFIG: AttackCombatConfig = {
       attackIntervalMs: 720,
     },
     swarm: {
-      maxHealth: 50,
+      maxHealth: 58,
       movementSpeed: 2.05,
       attackDamage: 8,
       attackRange: 1.1,
@@ -45,8 +45,8 @@ export const PROTOTYPE_ATTACK_COMBAT_CONFIG: AttackCombatConfig = {
     ranger: {
       maxHealth: 62,
       movementSpeed: 1.5,
-      attackDamage: 13,
-      attackRange: 3.1,
+      attackDamage: 14,
+      attackRange: 3.5,
       attackIntervalMs: 610,
     },
   },
@@ -55,19 +55,24 @@ export const PROTOTYPE_ATTACK_COMBAT_CONFIG: AttackCombatConfig = {
       rangeInCells: 3.35,
       damage: 8,
       attackIntervalMs: 340,
-      splashRadiusInCells: 0,
+      attackPattern: { kind: 'single' },
     },
     mortar: {
       rangeInCells: 3.85,
       damage: 18,
       attackIntervalMs: 1_080,
-      splashRadiusInCells: 1.25,
+      attackPattern: { kind: 'splash', radiusInCells: 1.25 },
     },
     piercer: {
       rangeInCells: 4.1,
       damage: 30,
       attackIntervalMs: 1_450,
-      splashRadiusInCells: 0,
+      attackPattern: {
+        kind: 'pierce',
+        maxTargets: 3,
+        secondaryDamageMultiplier: 0.6,
+        corridorWidthInCells: 0.4,
+      },
     },
   },
   commander: {
@@ -79,7 +84,7 @@ export const PROTOTYPE_ATTACK_COMBAT_CONFIG: AttackCombatConfig = {
   focusFireCommandRadius: 3,
   focusFireCooldownMs: 7_000,
   disruptDurationMs: 3_200,
-  disruptCooldownMs: 6_500,
+  disruptCooldownMs: 10_000,
   disruptRange: 4.2,
 };
 
