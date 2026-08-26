@@ -16,6 +16,15 @@ pnpm build:itch
 
 권장 파일명: `toy-base-reversal-itch.zip`
 
+빌드와 압축 구조 검증을 한 번에 실행하려면 다음 명령을 사용합니다.
+
+```powershell
+pnpm package:itch
+```
+
+패키징 스크립트는 최상단 `index.html`, `dist-itch/` 접두사 부재와 HTML에서
+참조하는 상대 자산의 ZIP 포함 여부를 확인하고 SHA-256 해시를 출력합니다.
+
 ## 3. itch.io 프로젝트 설정
 
 - Kind of project: `HTML`
@@ -42,3 +51,12 @@ pnpm build:itch
 - 일시정지의 `조작법`이 방어 설계·방어 전투·공격 준비·공격 전투 단계에 맞게 바뀌는지 확인
 - GitHub Pages와 itch.io는 저장 출처가 달라 개인 기록과 음량 설정이 서로 공유되지 않는다는 점 확인
 - 온라인 순위표를 사용할 경우 itch.io 주소에서도 HTTPS API와 CORS가 허용되는지 확인
+
+## 6. 최신 로컬 패키지
+
+- 생성일: 2026-08-26
+- 파일: `toy-base-reversal-itch.zip`
+- 압축 최상단 항목: 61개
+- 크기: 약 26.23MB
+- SHA-256: `B34EEE2AA149564F3D1723F81223C2FB4E511E144B00F77DC5AE8C550E9FB828`
+- 포함 기능: 일반 모드 1~5라운드, 챌린지, 로컬 기록, 일반 모드 이어하기
