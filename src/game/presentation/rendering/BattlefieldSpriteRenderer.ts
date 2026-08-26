@@ -28,6 +28,14 @@ import {
 } from './ObstacleVisualPolicy';
 import { SpriteVisualBoundary } from './SpriteVisualBoundary';
 import { WalkAnimationCadence } from './WalkAnimationCadence';
+import {
+  SwarmFormationOffsetPolicy,
+  type CombatantFormationOffsetPolicy,
+} from './CombatantFormationOffsetPolicy';
+import {
+  ReadableCombatantVisualSizePolicy,
+  type CombatantVisualSizePolicy,
+} from './CombatantVisualSizePolicy';
 
 const COMMANDER_DISPLAY_SIZE = 76;
 
@@ -57,7 +65,13 @@ export class BattlefieldSpriteRenderer {
   private readonly commanderLabel: Phaser.GameObjects.Text;
   private readonly obstacleDamageGraphics: Phaser.GameObjects.Graphics;
 
-  public constructor(private readonly scene: Phaser.Scene) {
+  public constructor(
+    private readonly scene: Phaser.Scene,
+    private readonly formationOffsetPolicy: CombatantFormationOffsetPolicy =
+      new SwarmFormationOffsetPolicy(),
+    private readonly visualSizePolicy: CombatantVisualSizePolicy =
+      new ReadableCombatantVisualSizePolicy(),
+  ) {
     this.animationCatalog.register(scene);
     this.core = new BattlefieldSpriteView(
       scene,
@@ -146,6 +160,10 @@ export class BattlefieldSpriteRenderer {
   public renderDefenders(enemies: readonly DefenseEnemy[]): void {
     const descriptors = enemies.map((enemy): SpriteDescriptor => {
       const point = this.toWorld(enemy.renderColumn, enemy.renderRow);
+      const formationOffset = this.formationOffsetPolicy.offsetFor(
+        enemy.stats.archetype,
+        enemy.id,
+      );
       const animationProfile = this.animationCatalog.profileForUnit(
         enemy.stats.archetype,
       );
@@ -158,14 +176,11 @@ export class BattlefieldSpriteRenderer {
       return {
         id: enemy.id,
         texture,
-        x: point.x,
-        y: point.y,
-        displaySize:
-          enemy.stats.archetype === 'tank'
-            ? 68
-            : enemy.stats.archetype === 'ranger'
-              ? 62
-              : 56,
+        x: point.x + formationOffset.x,
+        y: point.y + formationOffset.y,
+        displaySize: this.visualSizePolicy.displaySizeFor(
+          enemy.stats.archetype,
+        ),
         depth: 15,
         baseColor: 0xe95e4f,
         tint: animationProfile === null ? 0xff8b82 : undefined,
@@ -184,6 +199,10 @@ export class BattlefieldSpriteRenderer {
   public renderAttackers(units: readonly AttackUnit[]): void {
     const descriptors = units.map((unit): SpriteDescriptor => {
       const point = this.toWorld(unit.renderColumn, unit.renderRow);
+      const formationOffset = this.formationOffsetPolicy.offsetFor(
+        unit.kind,
+        unit.id,
+      );
       const animationProfile = this.animationCatalog.profileForUnit(unit.kind);
       const texture =
         unit.kind === 'tank'
@@ -194,10 +213,9 @@ export class BattlefieldSpriteRenderer {
       return {
         id: unit.id,
         texture,
-        x: point.x,
-        y: point.y,
-        displaySize:
-          unit.kind === 'tank' ? 68 : unit.kind === 'ranger' ? 62 : 56,
+        x: point.x + formationOffset.x,
+        y: point.y + formationOffset.y,
+        displaySize: this.visualSizePolicy.displaySizeFor(unit.kind),
         depth: 16,
         baseColor: 0x159b8c,
         tint: animationProfile === null ? 0x79e5d8 : undefined,

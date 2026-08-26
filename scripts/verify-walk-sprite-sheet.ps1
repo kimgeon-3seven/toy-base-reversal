@@ -10,7 +10,13 @@ param(
   [double]$MinimumMeanFrameDifference = 10,
 
   [ValidateRange(0, 12)]
-  [int]$PassingLiftPixels = 3
+  [int]$PassingLiftPixels = 3,
+
+  [ValidateRange(0, 1)]
+  [double]$FootRegionStartRatio = 0.75,
+
+  [ValidateRange(0, 1000)]
+  [int]$MinimumFootSilhouetteChanges = 50
 )
 
 Set-StrictMode -Version Latest
@@ -70,6 +76,45 @@ function New-RenderedFrame(
   return $rendered
 }
 
+function New-AlphaRenderedFrame(
+  [System.Drawing.Bitmap]$frame,
+  [int]$size
+) {
+  $rendered = [System.Drawing.Bitmap]::new(
+    $size,
+    $size,
+    [System.Drawing.Imaging.PixelFormat]::Format32bppArgb
+  )
+  $graphics = [System.Drawing.Graphics]::FromImage($rendered)
+  try {
+    $graphics.Clear([System.Drawing.Color]::Transparent)
+    $graphics.InterpolationMode = [System.Drawing.Drawing2D.InterpolationMode]::HighQualityBicubic
+    $graphics.DrawImage($frame, 0, 0, $size, $size)
+  } finally {
+    $graphics.Dispose()
+  }
+  return $rendered
+}
+
+function Get-FootSilhouetteChanges(
+  [System.Drawing.Bitmap]$first,
+  [System.Drawing.Bitmap]$second,
+  [double]$startRatio
+) {
+  $startRow = [int][Math]::Floor($first.Height * $startRatio)
+  $changes = 0
+  for ($row = $startRow; $row -lt $first.Height; $row += 1) {
+    for ($column = 0; $column -lt $first.Width; $column += 1) {
+      $firstVisible = $first.GetPixel($column, $row).A -gt 48
+      $secondVisible = $second.GetPixel($column, $row).A -gt 48
+      if ($firstVisible -ne $secondVisible) {
+        $changes += 1
+      }
+    }
+  }
+  return $changes
+}
+
 function Get-MeanFrameDifference(
   [System.Drawing.Bitmap]$first,
   [System.Drawing.Bitmap]$second
@@ -108,9 +153,13 @@ try {
   }
 
   $minimumDifference = [double]::PositiveInfinity
+  $minimumObservedFootSilhouetteChanges = [int]::MaxValue
+  $minimumFootChangesByDirection = @()
+  $oppositeContactChangesByDirection = @()
   for ($directionRow = 0; $directionRow -lt $rowCount; $directionRow += 1) {
     $frames = @()
     $renderedFrames = @()
+    $alphaRenderedFrames = @()
     try {
       for ($column = 0; $column -lt $columnCount; $column += 1) {
         $frame = $sheet.Clone(
@@ -136,6 +185,7 @@ try {
           )
         }
         $renderedFrames += New-RenderedFrame $frame $RenderedSize
+        $alphaRenderedFrames += New-AlphaRenderedFrame $frame $RenderedSize
       }
 
       Assert-FramesEquivalent `
@@ -147,6 +197,7 @@ try {
         -second $frames[4] `
         -message "Opposite contact frames differ in direction row $directionRow."
 
+      $directionFootChanges = @()
       for ($column = 0; $column -lt $columnCount; $column += 1) {
         $difference = Get-MeanFrameDifference `
           -first $renderedFrames[$column] `
@@ -158,12 +209,38 @@ try {
             "$([Math]::Round($difference, 2)) < $MinimumMeanFrameDifference."
           )
         }
+        $footSilhouetteChanges = Get-FootSilhouetteChanges `
+          -first $alphaRenderedFrames[$column] `
+          -second $alphaRenderedFrames[($column + 1) % $columnCount] `
+          -startRatio $FootRegionStartRatio
+        $minimumObservedFootSilhouetteChanges = [Math]::Min(
+          $minimumObservedFootSilhouetteChanges,
+          $footSilhouetteChanges
+        )
+        $directionFootChanges += $footSilhouetteChanges
+        if ($footSilhouetteChanges -lt $MinimumFootSilhouetteChanges) {
+          throw (
+            "Walk footwork is too subtle in row $directionRow column $column`: " +
+            "$footSilhouetteChanges silhouette pixels changed, expected at least " +
+            "$MinimumFootSilhouetteChanges."
+          )
+        }
       }
+      $minimumFootChangesByDirection += (
+        $directionFootChanges | Measure-Object -Minimum
+      ).Minimum
+      $oppositeContactChangesByDirection += Get-FootSilhouetteChanges `
+        -first $alphaRenderedFrames[0] `
+        -second $alphaRenderedFrames[2] `
+        -startRatio $FootRegionStartRatio
     } finally {
       foreach ($frame in $frames) {
         $frame.Dispose()
       }
       foreach ($frame in $renderedFrames) {
+        $frame.Dispose()
+      }
+      foreach ($frame in $alphaRenderedFrames) {
         $frame.Dispose()
       }
     }
@@ -176,6 +253,10 @@ try {
     MinimumMeanFrameDifference = [Math]::Round($minimumDifference, 2)
     ContactBaseline = $contactBaseline
     PassingBaseline = $passingBaseline
+    FootRegionStartRatio = $FootRegionStartRatio
+    MinimumFootSilhouetteChanges = $minimumObservedFootSilhouetteChanges
+    MinimumFootChangesByDirection = $minimumFootChangesByDirection
+    OppositeContactChangesByDirection = $oppositeContactChangesByDirection
   }
 } finally {
   $sheet.Dispose()
