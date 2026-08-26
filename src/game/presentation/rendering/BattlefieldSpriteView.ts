@@ -181,7 +181,7 @@ export class BattlefieldSpriteView {
           action === 'walk'
             ? this.walkAnimationCadence.timeScaleFor(
                 state.movementSpeedCellsPerSecond,
-              )
+              ) * animationProfile.walkCadenceScale
             : 1;
         const animationKey = this.animationCatalog.animationKey(
           animationProfile,

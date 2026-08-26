@@ -120,4 +120,43 @@ describe('BattlefieldSpriteView', () => {
     expect(image.play).toHaveBeenCalledWith('shield-walk-east');
     expect(image.anims.timeScale).toBeCloseTo(5.75 / 8);
   });
+
+  it('slows authored six-frame cycles without changing shield cadence', () => {
+    const image = createChainableDisplay();
+    const scene = {
+      time: { now: 100 },
+      add: {
+        ellipse: vi.fn(() => createChainableDisplay()),
+        sprite: vi.fn(() => image),
+      },
+    } as unknown as Phaser.Scene;
+    const catalog = new DirectionalAnimationCatalog();
+    const state: BattlefieldSpriteState = {
+      texture: 'attacker-ranger',
+      x: 100,
+      y: 100,
+      displaySize: 70,
+      depth: 16,
+      naturalFacingDegrees: 0,
+      initialFacingDegrees: 0,
+      facingMode: 'eight-way',
+      enableMovementBob: true,
+      isMoving: true,
+      movementSpeedCellsPerSecond: 1.15,
+      animationProfile: catalog.profileForUnit('ranger'),
+    };
+
+    const view = new BattlefieldSpriteView(
+      scene,
+      new FacingDirectionResolver(),
+      catalog,
+      new WalkAnimationCadence(),
+      'attacker-ranger-cadence-test',
+      state,
+    );
+    view.sync({ ...state, x: 101 });
+
+    expect(image.play).toHaveBeenCalledWith('ranger-walk-east');
+    expect(image.anims.timeScale).toBeCloseTo((5.75 / 8) * 0.78);
+  });
 });
