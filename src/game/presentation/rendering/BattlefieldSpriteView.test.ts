@@ -3,9 +3,10 @@ import { describe, expect, it, vi } from 'vitest';
 import { BattlefieldSpriteView, type BattlefieldSpriteState } from './BattlefieldSpriteView';
 import { DirectionalAnimationCatalog } from './DirectionalAnimationCatalog';
 import { FacingDirectionResolver } from './FacingDirectionResolver';
+import { WalkAnimationCadence } from './WalkAnimationCadence';
 
 type ChainableDisplay = Record<string, ReturnType<typeof vi.fn>> & {
-  anims: { stop: ReturnType<typeof vi.fn> };
+  anims: { stop: ReturnType<typeof vi.fn>; timeScale: number };
 };
 
 const DISPLAY_METHODS = [
@@ -27,7 +28,7 @@ const DISPLAY_METHODS = [
 
 function createChainableDisplay(): ChainableDisplay {
   const display = {
-    anims: { stop: vi.fn() },
+    anims: { stop: vi.fn(), timeScale: 1 },
   } as ChainableDisplay;
   for (const method of DISPLAY_METHODS) {
     display[method] = vi.fn(() => display);
@@ -66,6 +67,7 @@ describe('BattlefieldSpriteView', () => {
       scene,
       new FacingDirectionResolver(),
       catalog,
+      new WalkAnimationCadence(),
       'attacker-ranger-test',
       state,
     );
@@ -76,5 +78,46 @@ describe('BattlefieldSpriteView', () => {
     view.sync(state);
 
     expect(image.play).toHaveBeenCalledWith('ranger-attack-east');
+    expect(image.anims.timeScale).toBe(1);
+  });
+
+  it('ties the walk animation cadence to the unit movement speed', () => {
+    const image = createChainableDisplay();
+    const sceneTime = { now: 100 };
+    const scene = {
+      time: sceneTime,
+      add: {
+        ellipse: vi.fn(() => createChainableDisplay()),
+        sprite: vi.fn(() => image),
+      },
+    } as unknown as Phaser.Scene;
+    const catalog = new DirectionalAnimationCatalog();
+    const state: BattlefieldSpriteState = {
+      texture: 'attacker-tank',
+      x: 100,
+      y: 100,
+      displaySize: 68,
+      depth: 16,
+      naturalFacingDegrees: 0,
+      initialFacingDegrees: 0,
+      facingMode: 'eight-way',
+      enableMovementBob: true,
+      isMoving: true,
+      movementSpeedCellsPerSecond: 1.15,
+      animationProfile: catalog.profileForUnit('tank'),
+    };
+
+    const view = new BattlefieldSpriteView(
+      scene,
+      new FacingDirectionResolver(),
+      catalog,
+      new WalkAnimationCadence(),
+      'attacker-tank-test',
+      state,
+    );
+    view.sync({ ...state, x: 101 });
+
+    expect(image.play).toHaveBeenCalledWith('shield-walk-east');
+    expect(image.anims.timeScale).toBeCloseTo(5.75 / 8);
   });
 });

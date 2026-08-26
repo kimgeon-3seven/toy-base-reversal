@@ -58,5 +58,5 @@ pnpm package:itch
 - 파일: `toy-base-reversal-itch.zip`
 - 압축 최상단 항목: 61개
 - 크기: 약 26.23MB
-- SHA-256: `B34EEE2AA149564F3D1723F81223C2FB4E511E144B00F77DC5AE8C550E9FB828`
+- SHA-256: `93E22A15045861762BCD3F03A6FCD1787620751BC11670D683BDF96A845C3423`
 - 포함 기능: 일반 모드 1~5라운드, 챌린지, 로컬 기록, 일반 모드 이어하기

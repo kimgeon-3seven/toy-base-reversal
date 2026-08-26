@@ -8,6 +8,7 @@ import type {
 import { SpriteAttackFeedbackResolver } from './SpriteAttackFeedbackResolver';
 import { SpriteAnimationStateMachine } from './SpriteAnimationStateMachine';
 import type { SpriteFacingMode } from './SpriteFacingMode';
+import type { WalkAnimationCadencePolicy } from './WalkAnimationCadence';
 
 const WALK_STOP_GRACE_DURATION_MS = 48;
 
@@ -24,6 +25,7 @@ export interface BattlefieldSpriteState {
   readonly facingMode: SpriteFacingMode;
   readonly enableMovementBob: boolean;
   readonly isMoving?: boolean;
+  readonly movementSpeedCellsPerSecond?: number;
   readonly isDisrupted?: boolean;
   readonly baseColor?: number;
   readonly baseScale?: number;
@@ -57,6 +59,7 @@ export class BattlefieldSpriteView {
     private readonly scene: Phaser.Scene,
     private readonly facingResolver: FacingDirectionResolver,
     private readonly animationCatalog: DirectionalAnimationCatalog,
+    private readonly walkAnimationCadence: WalkAnimationCadencePolicy,
     id: string,
     initialState: BattlefieldSpriteState,
   ) {
@@ -158,6 +161,7 @@ export class BattlefieldSpriteView {
       .setVisible(state.baseColor !== undefined);
     if (animationProfile === null) {
       this.image.anims.stop();
+      this.image.anims.timeScale = 1;
       this.image.setTexture(state.texture);
       this.currentAnimationKey = null;
     } else {
@@ -166,12 +170,19 @@ export class BattlefieldSpriteView {
       );
       if (action === 'idle') {
         this.image.anims.stop();
+        this.image.anims.timeScale = 1;
         this.image.setTexture(
           animationProfile.walkTexture,
           this.animationCatalog.idleFrame(direction),
         );
         this.currentAnimationKey = null;
       } else {
+        this.image.anims.timeScale =
+          action === 'walk'
+            ? this.walkAnimationCadence.timeScaleFor(
+                state.movementSpeedCellsPerSecond,
+              )
+            : 1;
         const animationKey = this.animationCatalog.animationKey(
           animationProfile,
           action,
