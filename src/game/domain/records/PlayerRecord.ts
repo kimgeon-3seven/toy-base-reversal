@@ -9,9 +9,14 @@ export interface ChallengeBestRecord {
   readonly achievedAt: string;
 }
 
+export interface NormalProgressRecord {
+  readonly highestCompletedRound: number;
+}
+
 export interface PlayerRecordSnapshot {
   readonly version: 1;
   readonly playerName: string;
+  readonly normalProgress?: NormalProgressRecord;
   readonly normalBest: NormalBestRecord | null;
   readonly challengeBest: ChallengeBestRecord | null;
 }
@@ -28,6 +33,7 @@ export class PlayerRecord {
     return new PlayerRecord({
       version: 1,
       playerName: PlayerRecord.validatePlayerName(playerName),
+      normalProgress: { highestCompletedRound: 0 },
       normalBest: null,
       challengeBest: null,
     });
@@ -48,6 +54,10 @@ export class PlayerRecord {
             ),
             achievedAt: PlayerRecord.validateDate(snapshot.normalBest.achievedAt),
           };
+    const highestCompletedRound = PlayerRecord.validateNormalProgress(
+      snapshot.normalProgress?.highestCompletedRound ??
+        (normalBest === null ? 0 : 5),
+    );
     const challengeBest =
       snapshot.challengeBest === null
         ? null
@@ -65,6 +75,7 @@ export class PlayerRecord {
     return new PlayerRecord({
       version: 1,
       playerName,
+      normalProgress: { highestCompletedRound },
       normalBest,
       challengeBest,
     });
@@ -78,6 +89,10 @@ export class PlayerRecord {
     return this.data.normalBest === null ? null : { ...this.data.normalBest };
   }
 
+  public get highestCompletedNormalRound(): number {
+    return this.data.normalProgress?.highestCompletedRound ?? 0;
+  }
+
   public get challengeBest(): ChallengeBestRecord | null {
     return this.data.challengeBest === null
       ? null
@@ -88,6 +103,9 @@ export class PlayerRecord {
     return {
       version: 1,
       playerName: this.data.playerName,
+      normalProgress: {
+        highestCompletedRound: this.highestCompletedNormalRound,
+      },
       normalBest: this.normalBest,
       challengeBest: this.challengeBest,
     };
@@ -112,7 +130,23 @@ export class PlayerRecord {
     return {
       record: new PlayerRecord({
         ...this.data,
+        normalProgress: { highestCompletedRound: 5 },
         normalBest: { totalAttackTimeMs: clearTime, achievedAt: date },
+      }),
+      isNewBest: true,
+    };
+  }
+
+  public recordNormalRoundCompletion(round: number): PlayerRecordUpdate {
+    const completedRound = PlayerRecord.validateNormalRound(round);
+    if (completedRound <= this.highestCompletedNormalRound) {
+      return { record: this, isNewBest: false };
+    }
+
+    return {
+      record: new PlayerRecord({
+        ...this.data,
+        normalProgress: { highestCompletedRound: completedRound },
       }),
       isNewBest: true,
     };
@@ -176,6 +210,20 @@ export class PlayerRecord {
   private static validateRound(round: number): number {
     if (!Number.isInteger(round) || round <= 0) {
       throw new Error('Challenge round must be a positive integer.');
+    }
+    return round;
+  }
+
+  private static validateNormalRound(round: number): number {
+    if (!Number.isInteger(round) || round < 1 || round > 5) {
+      throw new Error('Normal completed round must be between 1 and 5.');
+    }
+    return round;
+  }
+
+  private static validateNormalProgress(round: number): number {
+    if (!Number.isInteger(round) || round < 0 || round > 5) {
+      throw new Error('Normal progress must be between 0 and 5.');
     }
     return round;
   }

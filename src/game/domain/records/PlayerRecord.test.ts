@@ -5,6 +5,20 @@ const FIRST_DATE = '2026-08-19T06:00:00.000Z';
 const SECOND_DATE = '2026-08-19T07:00:00.000Z';
 
 describe('PlayerRecord', () => {
+  it('keeps the highest completed normal round without lowering progress', () => {
+    const initial = PlayerRecord.create('로컬 플레이어');
+    const thirdRound = initial.recordNormalRoundCompletion(3);
+    const repeated = thirdRound.record.recordNormalRoundCompletion(3);
+    const lowerRound = repeated.record.recordNormalRoundCompletion(2);
+    const finalRound = lowerRound.record.recordNormalRoundCompletion(5);
+
+    expect(initial.highestCompletedNormalRound).toBe(0);
+    expect(thirdRound.isNewBest).toBe(true);
+    expect(repeated.isNewBest).toBe(false);
+    expect(lowerRound.isNewBest).toBe(false);
+    expect(finalRound.record.highestCompletedNormalRound).toBe(5);
+  });
+
   it('keeps only the fastest normal-mode completion', () => {
     const initial = PlayerRecord.create(' 로컬 플레이어 ');
     const first = initial.recordNormalCompletion(150_000, FIRST_DATE);
@@ -70,6 +84,42 @@ describe('PlayerRecord', () => {
         },
       }),
     ).toThrow('Challenge round must be a positive integer.');
+  });
+
+  it('migrates legacy records without normal progress', () => {
+    const incomplete = PlayerRecord.restore({
+      version: 1,
+      playerName: '로컬 플레이어',
+      normalBest: null,
+      challengeBest: null,
+    });
+    const completed = PlayerRecord.restore({
+      version: 1,
+      playerName: '로컬 플레이어',
+      normalBest: {
+        totalAttackTimeMs: 120_000,
+        achievedAt: FIRST_DATE,
+      },
+      challengeBest: null,
+    });
+
+    expect(incomplete.highestCompletedNormalRound).toBe(0);
+    expect(completed.highestCompletedNormalRound).toBe(5);
+  });
+
+  it('rejects invalid normal progress', () => {
+    expect(() =>
+      PlayerRecord.restore({
+        version: 1,
+        playerName: '로컬 플레이어',
+        normalProgress: { highestCompletedRound: 6 },
+        normalBest: null,
+        challengeBest: null,
+      }),
+    ).toThrow('Normal progress must be between 0 and 5.');
+    expect(() =>
+      PlayerRecord.create('로컬 플레이어').recordNormalRoundCompletion(0),
+    ).toThrow('Normal completed round must be between 1 and 5.');
   });
 
   it('renames the player without losing best records', () => {
