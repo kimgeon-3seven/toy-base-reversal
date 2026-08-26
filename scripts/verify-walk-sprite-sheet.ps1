@@ -16,7 +16,9 @@ param(
   [double]$FootRegionStartRatio = 0.75,
 
   [ValidateRange(0, 1000)]
-  [int]$MinimumFootSilhouetteChanges = 50
+  [int]$MinimumFootSilhouetteChanges = 50,
+
+  [switch]$AuthoredSixFrameCycle
 )
 
 Set-StrictMode -Version Latest
@@ -143,6 +145,25 @@ function Assert-FramesEquivalent(
   }
 }
 
+function Assert-FramesDistinct(
+  [System.Drawing.Bitmap[]]$frames,
+  [int]$directionRow
+) {
+  for ($firstIndex = 0; $firstIndex -lt $frames.Count; $firstIndex += 1) {
+    for ($secondIndex = $firstIndex + 1; $secondIndex -lt $frames.Count; $secondIndex += 1) {
+      $difference = Get-MeanFrameDifference `
+        -first $frames[$firstIndex] `
+        -second $frames[$secondIndex]
+      if ($difference -le 0.1) {
+        throw (
+          "Authored frames $firstIndex and $secondIndex are duplicated " +
+          "in direction row $directionRow."
+        )
+      }
+    }
+  }
+}
+
 $sheet = [System.Drawing.Bitmap]::new($InputPath)
 try {
   if (
@@ -173,7 +194,12 @@ try {
         )
         $frames += $frame
         $bounds = Get-VisibleBounds $frame
-        $expectedBaseline = if ($column % 2 -eq 1) {
+        $isPassingFrame = if ($AuthoredSixFrameCycle) {
+          $column -eq 2 -or $column -eq 5
+        } else {
+          $column % 2 -eq 1
+        }
+        $expectedBaseline = if ($isPassingFrame) {
           $passingBaseline
         } else {
           $contactBaseline
@@ -188,14 +214,18 @@ try {
         $alphaRenderedFrames += New-AlphaRenderedFrame $frame $RenderedSize
       }
 
-      Assert-FramesEquivalent `
-        -first $frames[1] `
-        -second $frames[5] `
-        -message "Passing frames differ in direction row $directionRow."
-      Assert-FramesEquivalent `
-        -first $frames[2] `
-        -second $frames[4] `
-        -message "Opposite contact frames differ in direction row $directionRow."
+      if ($AuthoredSixFrameCycle) {
+        Assert-FramesDistinct -frames $frames -directionRow $directionRow
+      } else {
+        Assert-FramesEquivalent `
+          -first $frames[1] `
+          -second $frames[5] `
+          -message "Passing frames differ in direction row $directionRow."
+        Assert-FramesEquivalent `
+          -first $frames[2] `
+          -second $frames[4] `
+          -message "Opposite contact frames differ in direction row $directionRow."
+      }
 
       $directionFootChanges = @()
       for ($column = 0; $column -lt $columnCount; $column += 1) {
@@ -229,9 +259,10 @@ try {
       $minimumFootChangesByDirection += (
         $directionFootChanges | Measure-Object -Minimum
       ).Minimum
+      $oppositeContactColumn = if ($AuthoredSixFrameCycle) { 3 } else { 2 }
       $oppositeContactChangesByDirection += Get-FootSilhouetteChanges `
         -first $alphaRenderedFrames[0] `
-        -second $alphaRenderedFrames[2] `
+        -second $alphaRenderedFrames[$oppositeContactColumn] `
         -startRatio $FootRegionStartRatio
     } finally {
       foreach ($frame in $frames) {
@@ -253,6 +284,7 @@ try {
     MinimumMeanFrameDifference = [Math]::Round($minimumDifference, 2)
     ContactBaseline = $contactBaseline
     PassingBaseline = $passingBaseline
+    UsesAuthoredSixFrameCycle = $AuthoredSixFrameCycle.IsPresent
     FootRegionStartRatio = $FootRegionStartRatio
     MinimumFootSilhouetteChanges = $minimumObservedFootSilhouetteChanges
     MinimumFootChangesByDirection = $minimumFootChangesByDirection

@@ -9,6 +9,13 @@ param(
 
   [switch]$PingPongCycle,
 
+  [switch]$AuthoredSixFrameCycle,
+
+  [switch]$MirrorFiveDirectionSource,
+
+  [ValidateSet(4, 6)]
+  [int]$SourceColumnCount = 4,
+
   [switch]$MagentaChromaKey,
 
   [ValidateRange(0, 12)]
@@ -21,16 +28,31 @@ $ErrorActionPreference = 'Stop'
 Add-Type -AssemblyName System.Drawing
 
 $cellSize = 160
-$rowCount = 8
-$sourceColumnCount = 4
+$targetRowCount = 8
+$sourceRowCount = if ($MirrorFiveDirectionSource) { 5 } else { 8 }
 $contentWidth = 140
 $contentHeight = 143
 $baselineY = 151
 
+if ($AuthoredSixFrameCycle -and $SourceColumnCount -ne 6) {
+  throw 'AuthoredSixFrameCycle requires SourceColumnCount 6.'
+}
+
 # Contact -> passing -> opposite contact -> passing produces a seamless loop.
 # Shield v1 needs alternate southwest and west source frames. Later sheets use
 # the authored contact frame in every direction so their idle pose stays grounded.
-$frameSequences = if ($PingPongCycle) {
+$frameSequences = if ($AuthoredSixFrameCycle) {
+  @(
+    ,@(0, 1, 2, 3, 4, 5)
+    ,@(0, 1, 2, 3, 4, 5)
+    ,@(0, 1, 2, 3, 4, 5)
+    ,@(0, 1, 2, 3, 4, 5)
+    ,@(0, 1, 2, 3, 4, 5)
+    ,@(0, 1, 2, 3, 4, 5)
+    ,@(0, 1, 2, 3, 4, 5)
+    ,@(0, 1, 2, 3, 4, 5)
+  )
+} elseif ($PingPongCycle) {
   @(
     ,@(0, 1, 2, 3, 2, 1)
     ,@(0, 1, 2, 3, 2, 1)
@@ -242,10 +264,12 @@ try {
     -not $MagentaChromaKey -and
     (
       $source.Width -ne $cellSize * $sourceColumnCount -or
-      $source.Height -ne $cellSize * $rowCount
+      $source.Height -ne $cellSize * $sourceRowCount
     )
   ) {
-    throw "Expected a 640x1280 sprite sheet, got $($source.Width)x$($source.Height)."
+    $expectedWidth = $cellSize * $SourceColumnCount
+    $expectedHeight = $cellSize * $sourceRowCount
+    throw "Expected a $($expectedWidth)x$($expectedHeight) sprite sheet, got $($source.Width)x$($source.Height)."
   }
 
   $workingSource = if ($MagentaChromaKey) {
@@ -257,12 +281,12 @@ try {
   $sourceRowBoundaries = if ($MagentaChromaKey) {
     Get-WeightedClusterBoundaries (
       Get-VerticalAlphaWeights $workingSource
-    ) $rowCount
+    ) $sourceRowCount
   } else {
-    @(0..$rowCount | ForEach-Object { $_ * $cellSize })
+    @(0..$sourceRowCount | ForEach-Object { $_ * $cellSize })
   }
   $sourceColumnBoundaries = @()
-  for ($directionRow = 0; $directionRow -lt $rowCount; $directionRow += 1) {
+  for ($directionRow = 0; $directionRow -lt $sourceRowCount; $directionRow += 1) {
     $columnBoundaries = if ($MagentaChromaKey) {
       Get-WeightedClusterBoundaries (
         Get-HorizontalAlphaWeights `
@@ -278,7 +302,7 @@ try {
 
   $output = [System.Drawing.Bitmap]::new(
     $cellSize * $targetColumnCount,
-    $cellSize * $rowCount,
+    $cellSize * $targetRowCount,
     [System.Drawing.Imaging.PixelFormat]::Format32bppArgb
   )
   $graphics = [System.Drawing.Graphics]::FromImage($output)
@@ -290,14 +314,26 @@ try {
     $graphics.PixelOffsetMode = [System.Drawing.Drawing2D.PixelOffsetMode]::HighQuality
     $graphics.SmoothingMode = [System.Drawing.Drawing2D.SmoothingMode]::HighQuality
 
-    for ($directionRow = 0; $directionRow -lt $rowCount; $directionRow += 1) {
+    for ($directionRow = 0; $directionRow -lt $targetRowCount; $directionRow += 1) {
+      $sourceDirectionRow = if (-not $MirrorFiveDirectionSource) {
+        $directionRow
+      } elseif ($directionRow -le 4) {
+        $directionRow
+      } elseif ($directionRow -eq 5) {
+        3
+      } elseif ($directionRow -eq 6) {
+        2
+      } else {
+        1
+      }
+      $mirrorSourceFrame = $MirrorFiveDirectionSource -and $directionRow -ge 5
       $preparedFrames = @()
       try {
         foreach ($sourceColumn in $frameSequences[$directionRow]) {
-          $sourceLeft = $sourceColumnBoundaries[$directionRow][$sourceColumn]
-          $sourceRight = $sourceColumnBoundaries[$directionRow][$sourceColumn + 1]
-          $sourceTop = $sourceRowBoundaries[$directionRow]
-          $sourceBottom = $sourceRowBoundaries[$directionRow + 1]
+          $sourceLeft = $sourceColumnBoundaries[$sourceDirectionRow][$sourceColumn]
+          $sourceRight = $sourceColumnBoundaries[$sourceDirectionRow][$sourceColumn + 1]
+          $sourceTop = $sourceRowBoundaries[$sourceDirectionRow]
+          $sourceBottom = $sourceRowBoundaries[$sourceDirectionRow + 1]
           $sourceBounds = [System.Drawing.Rectangle]::new(
             $sourceLeft,
             $sourceTop,
@@ -308,6 +344,9 @@ try {
             $sourceBounds,
             [System.Drawing.Imaging.PixelFormat]::Format32bppArgb
           )
+          if ($mirrorSourceFrame) {
+            $frame.RotateFlip([System.Drawing.RotateFlipType]::RotateNoneFlipX)
+          }
           $preparedFrames += [PSCustomObject]@{
             Bitmap = $frame
             VisibleBounds = Find-VisibleBounds $frame
@@ -327,7 +366,12 @@ try {
           $targetWidth = [int][Math]::Round($visibleBounds.Width * $sharedScale)
           $targetHeight = [int][Math]::Round($visibleBounds.Height * $sharedScale)
           $targetX = $targetColumn * $cellSize + [int][Math]::Round(($cellSize - $targetWidth) / 2)
-          $passingLift = if ($targetColumn % 2 -eq 1) {
+          $isPassingFrame = if ($AuthoredSixFrameCycle) {
+            $targetColumn -eq 2 -or $targetColumn -eq 5
+          } else {
+            $targetColumn % 2 -eq 1
+          }
+          $passingLift = if ($isPassingFrame) {
             $PassingLiftPixels
           } else {
             0

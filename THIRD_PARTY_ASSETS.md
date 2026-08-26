@@ -50,6 +50,18 @@ video diagnosis, transformation steps, and foot-region QA are recorded in
 - `public/assets/sprites/tower-defense/unit-windup-walk-8way-v4.png`
 - `public/assets/sprites/tower-defense/unit-ranger-walk-8way-v4.png`
 
+After direct player review identified that the `v4` pipeline duplicated source
+poses instead of authoring the missing passing poses, the following `v5`
+project-owned sources were generated as five directions with six unique phases.
+The pipeline mirrors three left-facing rows and preserves all six authored
+phases without ping-pong duplication. Exact prompts and QA evidence are recorded
+in `docs/portfolio/iterations/024-authored-six-phase-walk-v5.md`:
+
+- `artifacts/sprite-source/unit-windup-walk-grid-v5-magenta.png`
+- `artifacts/sprite-source/unit-ranger-walk-grid-v5-magenta.png`
+- `public/assets/sprites/tower-defense/unit-windup-walk-8way-v5.png`
+- `public/assets/sprites/tower-defense/unit-ranger-walk-8way-v5.png`
+
 ## Kenney
 
 Creator: Kenney Vleugels / Kenney.nl  

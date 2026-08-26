@@ -20,6 +20,7 @@ export interface DirectionalAnimationProfile {
   readonly attackTexture: string;
   readonly walkFrameColumns: number;
   readonly walkFrameOffsets: readonly number[];
+  readonly walkCadenceScale: number;
 }
 
 const DIRECTIONS: readonly SpriteDirection[] = [
@@ -39,6 +40,7 @@ const SHIELD_PROFILE: DirectionalAnimationProfile = {
   attackTexture: IMAGE_ASSETS.attackerTankAttack,
   walkFrameColumns: 4,
   walkFrameOffsets: [0, 1, 2, 1],
+  walkCadenceScale: 1,
 };
 
 const WINDUP_PROFILE: DirectionalAnimationProfile = {
@@ -47,6 +49,7 @@ const WINDUP_PROFILE: DirectionalAnimationProfile = {
   attackTexture: IMAGE_ASSETS.attackerSwarmAttack,
   walkFrameColumns: 6,
   walkFrameOffsets: [0, 1, 2, 3, 4, 5],
+  walkCadenceScale: 0.78,
 };
 
 const RANGER_PROFILE: DirectionalAnimationProfile = {
@@ -55,6 +58,7 @@ const RANGER_PROFILE: DirectionalAnimationProfile = {
   attackTexture: IMAGE_ASSETS.attackerRangerAttack,
   walkFrameColumns: 6,
   walkFrameOffsets: [0, 1, 2, 3, 4, 5],
+  walkCadenceScale: 0.78,
 };
 
 const UNIT_PROFILES: Readonly<

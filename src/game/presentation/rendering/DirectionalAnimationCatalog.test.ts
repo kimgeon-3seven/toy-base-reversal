@@ -25,18 +25,20 @@ describe('DirectionalAnimationCatalog', () => {
     ]);
   });
 
-  it('uses the full six-frame ping-pong sheet for the wind-up unit', () => {
+  it('uses the full six authored frames for the wind-up unit', () => {
     expect(catalog.profileForUnit('swarm')?.walkFrameOffsets).toEqual([
       0, 1, 2, 3, 4, 5,
     ]);
     expect(catalog.profileForUnit('swarm')?.walkFrameColumns).toBe(6);
+    expect(catalog.profileForUnit('swarm')?.walkCadenceScale).toBe(0.78);
   });
 
-  it('uses the full six-frame ping-pong sheet for the rubber-band ranger', () => {
+  it('uses the full six authored frames for the rubber-band ranger', () => {
     expect(catalog.profileForUnit('ranger')?.walkFrameOffsets).toEqual([
       0, 1, 2, 3, 4, 5,
     ]);
     expect(catalog.profileForUnit('ranger')?.walkFrameColumns).toBe(6);
+    expect(catalog.profileForUnit('ranger')?.walkCadenceScale).toBe(0.78);
   });
 
   it('uses each profile column count when resolving idle poses', () => {

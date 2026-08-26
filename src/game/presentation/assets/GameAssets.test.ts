@@ -19,12 +19,12 @@ describe('preloadGameAssets', () => {
     );
     expect(loader.spritesheet).toHaveBeenCalledWith(
       IMAGE_ASSETS.attackerSwarmWalk,
-      expect.stringContaining('unit-windup-walk-8way-v4.png'),
+      expect.stringContaining('unit-windup-walk-8way-v5.png'),
       { frameWidth: 160, frameHeight: 160 },
     );
     expect(loader.spritesheet).toHaveBeenCalledWith(
       IMAGE_ASSETS.attackerRangerWalk,
-      expect.stringContaining('unit-ranger-walk-8way-v4.png'),
+      expect.stringContaining('unit-ranger-walk-8way-v5.png'),
       { frameWidth: 160, frameHeight: 160 },
     );
     expect(loader.spritesheet).toHaveBeenCalledWith(
