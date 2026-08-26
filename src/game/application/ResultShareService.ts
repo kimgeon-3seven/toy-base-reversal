@@ -1,4 +1,5 @@
 import type { ClipboardWriter } from '../ports/ClipboardWriter';
+import { GAME_BRAND } from '../config/GameBrandConfig';
 
 export interface ResultShareSummary {
   readonly title: string;
@@ -15,7 +16,7 @@ export class ResultShareService {
     try {
       await this.clipboard.writeText(
         [
-          'TOY BASE REVERSAL',
+          GAME_BRAND.title,
           summary.title,
           ...summary.lines,
           `플레이: ${this.gameUrl}`,

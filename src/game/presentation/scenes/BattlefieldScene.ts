@@ -39,6 +39,7 @@ import {
   PROTOTYPE_DEFENSE_COMBAT_CONFIG,
 } from '../../config/DefenseCombatConfig';
 import { GAME_COLORS, GAME_HEIGHT, GAME_WIDTH } from '../../config/GameConfig';
+import { GAME_BRAND } from '../../config/GameBrandConfig';
 import { INITIAL_DEFENSE_PLACEMENTS } from '../../config/InitialDefenseConfig';
 import {
   isTowerAvailable,
@@ -430,14 +431,14 @@ export class BattlefieldScene extends Phaser.Scene {
       .setStrokeStyle(3, TOY_UI.coral, 0.95)
       .setDepth(68);
     this.add.rectangle(58, 11, 58, 15, 0xe4cc8f, 0.7).setAngle(-4).setDepth(69);
-    this.add.text(34, 24, 'TOY BASE REVERSAL', {
+    this.add.text(34, 24, GAME_BRAND.displayTitle, {
       color: '#fff2cf',
       fontFamily: TOY_UI.fontFamily,
       fontSize: '22px',
       fontStyle: 'bold',
     }).setDepth(69);
 
-    this.add.text(34, 53, '지키고, 뒤집고, 직접 돌파하라', {
+    this.add.text(34, 53, GAME_BRAND.subtitle, {
       color: '#9fe3c3',
       fontFamily: TOY_UI.fontFamily,
       fontSize: '13px',
@@ -3200,7 +3201,7 @@ export class BattlefieldScene extends Phaser.Scene {
       this.squadPlan?.lanes.map((lane) => lane.length).join(',') ?? '';
     this.game.canvas.setAttribute(
       'aria-label',
-      `Toy Base Reversal · ${phaseLabels[this.phase]}`,
+      `${GAME_BRAND.title} · ${phaseLabels[this.phase]}`,
     );
   }
 

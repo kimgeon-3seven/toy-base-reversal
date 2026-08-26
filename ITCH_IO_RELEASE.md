@@ -27,6 +27,7 @@ pnpm package:itch
 
 ## 3. itch.io 프로젝트 설정
 
+- 프로젝트 제목: `MY TOYBOX TALE: BUILD & BREAK`
 - Kind of project: `HTML`
 - 실행 방식: `Click to launch in fullscreen`
 - Mobile Friendly: 모바일 조작을 구현하기 전까지 끔
@@ -58,5 +59,5 @@ pnpm package:itch
 - 파일: `toy-base-reversal-itch.zip`
 - 압축 최상단 항목: 69개
 - 크기: 약 33.41MB
-- SHA-256: `29107C872E1EF971DB35482919C0B6A985F4AF189549C869FB7ABABADF735258`
+- SHA-256: `B897B1B32C0676E356FC584B17A6DCFA6C69010C112FDEDEFD6980104FE20098`
 - 포함 기능: 일반 모드 1~5라운드, 챌린지, 로컬 기록, 일반 모드 이어하기, 태엽 군단·고무줄 사수 고유 6단계 `v5` 보행

@@ -24,7 +24,7 @@ describe('ResultShareService', () => {
 
     expect(copied).toBe(true);
     expect(clipboard.text).toBe(
-      'TOY BASE REVERSAL\n일반 모드 완료\n5라운드 돌파\n누적 123.4초\n플레이: https://game.example/',
+      'MY TOYBOX TALE: BUILD & BREAK\n일반 모드 완료\n5라운드 돌파\n누적 123.4초\n플레이: https://game.example/',
     );
   });
 

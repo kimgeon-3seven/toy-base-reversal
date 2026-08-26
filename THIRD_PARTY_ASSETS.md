@@ -1,6 +1,6 @@
 # Third-party assets
 
-All third-party assets used by Toy Base Reversal are distributed under
+All third-party assets used by MY TOYBOX TALE: BUILD & BREAK are distributed under
 Creative Commons Zero (CC0). Attribution is not required, but the creators and
 source pages are documented here for traceability.
 
