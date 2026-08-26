@@ -9,6 +9,7 @@ export interface PauseMenuActions {
   readonly pause: () => void;
   readonly resume: () => void;
   readonly exitToOpening: () => void;
+  readonly exitDescription: () => string;
   readonly controls: () => string;
 }
 
@@ -107,7 +108,7 @@ export class PauseMenu {
       260,
       44,
       '게임 나가기',
-      () => this.showExitConfirmation(),
+      () => this.showExitConfirmation(actions.exitDescription()),
       {
         fill: TOY_UI.coral,
         hover: 0xf47768,
@@ -198,11 +199,9 @@ export class PauseMenu {
     this.cancelButton.setVisible(false);
   }
 
-  private showExitConfirmation(): void {
+  private showExitConfirmation(description: string): void {
     this.title.setText('현재 게임에서 나갈까요?');
-    this.body.setText(
-      '현재 라운드와 도전 진행은 사라집니다.\n개인 기록, 닉네임과 소리 설정은 유지됩니다.',
-    );
+    this.body.setText(description);
     this.resumeButton.setVisible(false);
     this.controlsButton.setVisible(false);
     this.exitButton.setVisible(false);
