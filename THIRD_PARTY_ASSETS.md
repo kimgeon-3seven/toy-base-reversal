@@ -39,6 +39,17 @@ recorded in `docs/portfolio/iterations/022-windup-ranger-gait-v3.md`:
 - `public/assets/sprites/tower-defense/unit-windup-walk-8way-v3.png`
 - `public/assets/sprites/tower-defense/unit-ranger-walk-8way-v3.png`
 
+The same built-in image generation workflow was used on 2026-08-26 to create
+the following project-owned `v4` sources with deliberately enlarged lower-body
+silhouettes for the final 64px and 70px in-game display sizes. The prompts,
+video diagnosis, transformation steps, and foot-region QA are recorded in
+`docs/portfolio/iterations/023-readable-footwork-v4.md`:
+
+- `artifacts/sprite-source/unit-windup-walk-grid-v4-magenta.png`
+- `artifacts/sprite-source/unit-ranger-walk-grid-v4-magenta.png`
+- `public/assets/sprites/tower-defense/unit-windup-walk-8way-v4.png`
+- `public/assets/sprites/tower-defense/unit-ranger-walk-8way-v4.png`
+
 ## Kenney
 
 Creator: Kenney Vleugels / Kenney.nl  
