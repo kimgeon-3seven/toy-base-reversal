@@ -781,7 +781,7 @@ export class BattlefieldScene extends Phaser.Scene {
       isDetailed ? '장난감 전쟁 · 첫 출전' : '장난감 전쟁 · 다시 출전',
     );
     this.tutorialRecordText.setText(
-      `${this.playerRecord.playerName}\n일반 ${this.normalBestText()} · 챌린지 ${this.challengeBestText()}`,
+      `${this.playerRecord.playerName}\n일반 ${this.normalProgressText()} · 최고 ${this.normalBestText()}\n챌린지 ${this.challengeBestText()}`,
     );
     this.tutorialTitleText.setText('내가 만든 방어선을,\n이번에는 내가 뚫는다');
     this.tutorialBodyText.setText(
@@ -2525,6 +2525,16 @@ export class BattlefieldScene extends Phaser.Scene {
     if (
       won &&
       completedRound !== null &&
+      !this.roundSession.isChallengeMode
+    ) {
+      const progressUpdate = this.gameRecordService.recordNormalRoundCompletion(
+        completedRound.roundNumber,
+      );
+      this.playerRecord = progressUpdate.record;
+    }
+    if (
+      won &&
+      completedRound !== null &&
       this.roundSession.isChallengeMode
     ) {
       const recordUpdate = this.gameRecordService.recordChallengeCompletion(
@@ -3058,7 +3068,7 @@ export class BattlefieldScene extends Phaser.Scene {
   private personalRecordSummary(): string {
     return [
       this.playerRecord.playerName,
-      `일반: ${this.normalBestText()}`,
+      `일반: ${this.normalProgressText()} · 최고 ${this.normalBestText()}`,
       `챌린지: ${this.challengeBestText()}`,
     ].join('\n');
   }
@@ -3068,6 +3078,13 @@ export class BattlefieldScene extends Phaser.Scene {
     return best === null
       ? '기록 없음'
       : this.formatTime(best.totalAttackTimeMs);
+  }
+
+  private normalProgressText(): string {
+    const completedRound = this.playerRecord.highestCompletedNormalRound;
+    return completedRound >= NORMAL_MODE_ROUND_COUNT
+      ? '완료'
+      : `진행 ${completedRound}/${NORMAL_MODE_ROUND_COUNT}R`;
   }
 
   private normalBestDateText(): string {

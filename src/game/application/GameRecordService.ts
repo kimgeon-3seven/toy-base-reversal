@@ -29,6 +29,10 @@ export class GameRecordService {
     return this.apply(update);
   }
 
+  public recordNormalRoundCompletion(round: number): PlayerRecordUpdate {
+    return this.apply(this.currentRecord.recordNormalRoundCompletion(round));
+  }
+
   public recordChallengeCompletion(
     round: number,
     attackTimeMs: number,

@@ -22,6 +22,18 @@ class InMemoryPlayerRecordRepository implements PlayerRecordRepository {
 }
 
 describe('GameRecordService', () => {
+  it('persists only higher normal-mode progress', () => {
+    const repository = new InMemoryPlayerRecordRepository();
+    const service = new GameRecordService(repository);
+
+    expect(service.recordNormalRoundCompletion(2).isNewBest).toBe(true);
+    expect(service.recordNormalRoundCompletion(1).isNewBest).toBe(false);
+    expect(service.recordNormalRoundCompletion(2).isNewBest).toBe(false);
+    expect(service.recordNormalRoundCompletion(4).isNewBest).toBe(true);
+    expect(repository.saveCount).toBe(2);
+    expect(repository.saved?.normalProgress?.highestCompletedRound).toBe(4);
+  });
+
   it('persists only a new best result', () => {
     const repository = new InMemoryPlayerRecordRepository();
     const service = new GameRecordService(
@@ -45,6 +57,7 @@ describe('GameRecordService', () => {
 
     restored.reset();
     expect(restored.record.normalBest).toBeNull();
+    expect(restored.record.highestCompletedNormalRound).toBe(0);
     expect(repository.saved).toBeNull();
   });
 

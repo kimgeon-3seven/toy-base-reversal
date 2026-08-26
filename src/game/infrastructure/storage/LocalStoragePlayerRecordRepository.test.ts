@@ -24,10 +24,12 @@ describe('LocalStoragePlayerRecordRepository', () => {
       new MemoryStorage(),
       'test-record',
     );
-    const snapshot = PlayerRecord.create('로컬 플레이어').recordNormalCompletion(
-      120_000,
-      '2026-08-19T06:00:00.000Z',
-    ).record.snapshot;
+    const snapshot = PlayerRecord.create('로컬 플레이어')
+      .recordNormalRoundCompletion(5)
+      .record.recordNormalCompletion(
+        120_000,
+        '2026-08-19T06:00:00.000Z',
+      ).record.snapshot;
 
     repository.save(snapshot);
     expect(repository.load()).toEqual(snapshot);
