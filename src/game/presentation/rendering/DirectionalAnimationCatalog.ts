@@ -2,6 +2,7 @@ import type Phaser from 'phaser';
 import type { UnitArchetype } from '../../domain/combat/CombatArchetype';
 import { IMAGE_ASSETS } from '../assets/GameAssets';
 import type { SpriteAnimationAction } from './SpriteAnimationStateMachine';
+import { WALK_ANIMATION_BASE_FRAME_RATE } from './WalkAnimationCadence';
 
 export type SpriteDirection =
   | 'north'
@@ -107,7 +108,15 @@ export class DirectionalAnimationCatalog {
   ): void {
     for (const direction of DIRECTIONS) {
       const row = this.directionRow(direction);
-      this.createAnimation(scene, profile, 'walk', direction, row, 10, -1);
+      this.createAnimation(
+        scene,
+        profile,
+        'walk',
+        direction,
+        row,
+        WALK_ANIMATION_BASE_FRAME_RATE,
+        -1,
+      );
       this.createAnimation(scene, profile, 'attack', direction, row, 12, 0);
     }
   }

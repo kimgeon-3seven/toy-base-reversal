@@ -27,6 +27,7 @@ import {
   type ObstacleVisualState,
 } from './ObstacleVisualPolicy';
 import { SpriteVisualBoundary } from './SpriteVisualBoundary';
+import { WalkAnimationCadence } from './WalkAnimationCadence';
 
 const COMMANDER_DISPLAY_SIZE = 76;
 
@@ -37,6 +38,7 @@ interface SpriteDescriptor extends BattlefieldSpriteState {
 export class BattlefieldSpriteRenderer {
   private readonly facingResolver = new FacingDirectionResolver();
   private readonly animationCatalog = new DirectionalAnimationCatalog();
+  private readonly walkAnimationCadence = new WalkAnimationCadence();
   private readonly facingProfile = new SpriteFacingProfile();
   private readonly obstacleVisualPolicy = new ObstacleVisualPolicy();
   private readonly visualBoundary = new SpriteVisualBoundary(
@@ -61,6 +63,7 @@ export class BattlefieldSpriteRenderer {
       scene,
       this.facingResolver,
       this.animationCatalog,
+      this.walkAnimationCadence,
       'core',
       this.coreState(0, 0, 1),
     );
@@ -171,6 +174,7 @@ export class BattlefieldSpriteRenderer {
         facingMode: 'eight-way',
         enableMovementBob: true,
         isMoving: enemy.isMoving,
+        movementSpeedCellsPerSecond: enemy.stats.movementSpeed,
         animationProfile,
       };
     });
@@ -202,6 +206,7 @@ export class BattlefieldSpriteRenderer {
         facingMode: 'eight-way',
         enableMovementBob: true,
         isMoving: unit.isMoving,
+        movementSpeedCellsPerSecond: unit.stats.movementSpeed,
         animationProfile,
       };
     });
@@ -246,6 +251,7 @@ export class BattlefieldSpriteRenderer {
         this.scene,
         this.facingResolver,
         this.animationCatalog,
+        this.walkAnimationCadence,
         'commander',
         state,
       );
@@ -295,6 +301,7 @@ export class BattlefieldSpriteRenderer {
             this.scene,
             this.facingResolver,
             this.animationCatalog,
+            this.walkAnimationCadence,
             descriptor.id,
             descriptor,
           ),
