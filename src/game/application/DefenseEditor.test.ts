@@ -199,4 +199,26 @@ describe('DefenseEditor construction transactions', () => {
       reason: 'insufficient-funds',
     });
   });
+
+  it('restores a campaign design, funds, upgrades, and a collision-free id', () => {
+    const original = createEditor(12);
+    const tower = original.placeTower('popgun', new GridPosition(1, 0));
+    if (!tower.success) throw new Error('Expected placement to succeed.');
+    original.upgradeTower(tower.structure.id);
+    const wall = original.place('obstacle', new GridPosition(2, 2));
+    if (!wall.success) throw new Error('Expected placement to succeed.');
+    const snapshot = original.captureCampaignState();
+
+    const restored = createEditor(30);
+    restored.restoreCampaignState({
+      blueprint: snapshot.blueprint.snapshot,
+      constructionFunds: snapshot.constructionFunds,
+    });
+    const next = restored.placeTower('popgun', new GridPosition(3, 0));
+
+    expect(restored.constructionFunds).toBe(snapshot.constructionFunds - 3);
+    expect(restored.battlefield.structures).toHaveLength(3);
+    expect(restored.battlefield.structures[0]?.upgradeLevel).toBe(2);
+    expect(next.success && next.structure.id).toBe('structure-3');
+  });
 });

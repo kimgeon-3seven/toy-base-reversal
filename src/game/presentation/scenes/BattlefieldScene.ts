@@ -1,6 +1,7 @@
 import Phaser from 'phaser';
 import { DefenseEditor } from '../../application/DefenseEditor';
 import type { AudioSettingsService } from '../../application/AudioSettingsService';
+import type { CampaignSaveService } from '../../application/CampaignSaveService';
 import { GamePauseState, type PauseOrigin } from '../../application/GamePauseState';
 import { PageActivityCoordinator } from '../../application/PageActivityCoordinator';
 import type {
@@ -72,13 +73,14 @@ import { AttackCombat } from '../../domain/attack/AttackCombat';
 import {
   attackUnitCost,
   type AttackUnitKind,
-  type SquadPlan,
+  SquadPlan,
 } from '../../domain/attack/SquadPlan';
 import { DefenseCombat } from '../../domain/combat/DefenseCombat';
 import type { TowerArchetype } from '../../domain/combat/CombatArchetype';
 import { GridPosition } from '../../domain/grid/GridPosition';
 import { BreadthFirstPathfinder } from '../../domain/pathfinding/BreadthFirstPathfinder';
 import { RoundSession } from '../../domain/rounds/RoundSession';
+import type { CampaignCheckpoint } from '../../domain/campaign/CampaignCheckpoint';
 import type { PlayerRecord } from '../../domain/records/PlayerRecord';
 import type { NicknameEditor } from '../../ports/NicknameEditor';
 import type { PageActivityMonitor } from '../../ports/PageActivityMonitor';
@@ -173,11 +175,14 @@ export class BattlefieldScene extends Phaser.Scene {
   private tutorialObjectiveText!: Phaser.GameObjects.Text;
   private tutorialControlText!: Phaser.GameObjects.Text;
   private tutorialStartButton!: TextButton;
+  private tutorialNewGameButton!: TextButton;
   private guideCoachPanel!: Phaser.GameObjects.Rectangle;
   private guideCoachText!: Phaser.GameObjects.Text;
   private roleReversalTimer: Phaser.Time.TimerEvent | null = null;
   private playerRecord!: PlayerRecord;
   private recordResetArmedUntil = 0;
+  private newGameResetArmedUntil = 0;
+  private campaignCheckpoint: CampaignCheckpoint | null = null;
   private latestRecordNotice = '';
   private resultShareSummary: ResultShareSummary | null = null;
   private leaderboardOverlay!: Phaser.GameObjects.Container;
@@ -222,6 +227,7 @@ export class BattlefieldScene extends Phaser.Scene {
     private readonly nicknameEditor: NicknameEditor,
     private readonly firstRunGuideService: FirstRunGuideService,
     private readonly audioSettingsService: AudioSettingsService,
+    private readonly campaignSaveService: CampaignSaveService,
     private readonly pageActivityMonitor: PageActivityMonitor,
     private readonly resultShareService: ResultShareService,
   ) {
@@ -243,6 +249,7 @@ export class BattlefieldScene extends Phaser.Scene {
     this.roundSession = new RoundSession(NORMAL_MODE_ROUND_COUNT);
     this.playerRecord = this.gameRecordService.record;
     this.recordResetArmedUntil = 0;
+    this.newGameResetArmedUntil = 0;
     this.latestRecordNotice = '';
     this.resultShareSummary = null;
     this.isLeaderboardOpen = false;
@@ -271,6 +278,7 @@ export class BattlefieldScene extends Phaser.Scene {
 
     this.seedInitialDesign();
     this.editor.saveBlueprint();
+    this.campaignCheckpoint = this.campaignSaveService.load();
 
     this.cameras.main.setBackgroundColor(GAME_COLORS.background);
     this.input.mouse?.disableContextMenu();
@@ -484,6 +492,10 @@ export class BattlefieldScene extends Phaser.Scene {
       pause: () => this.pauseGame(),
       resume: () => this.resumeGame(),
       exitToOpening: () => this.exitToOpening(),
+      exitDescription: () =>
+        this.roundSession.isChallengeMode
+          ? '챌린지 진행은 종료됩니다.\n개인 기록, 닉네임과 소리 설정은 유지됩니다.'
+          : '최근 자동 저장 지점은 유지됩니다.\n이어하기를 선택하면 현재 라운드의 준비 단계부터 재개합니다.',
       controls: () => this.currentPhaseControls(),
     });
     this.audioControlPanel = new AudioControlPanel(this, this.audioDirector);
@@ -668,6 +680,22 @@ export class BattlefieldScene extends Phaser.Scene {
       },
       'confirm',
     );
+    this.tutorialNewGameButton = new TextButton(
+      this,
+      160,
+      187,
+      280,
+      48,
+      '새 게임',
+      () => this.requestNewCampaignFromOpening(),
+      {
+        fill: TOY_UI.coral,
+        hover: 0xf47768,
+        stroke: TOY_UI.coralDark,
+        text: '#fff2f4',
+      },
+      'confirm',
+    );
 
     this.tutorialOverlay = this.add
       .container(640, GAME_HEIGHT / 2, [
@@ -682,6 +710,7 @@ export class BattlefieldScene extends Phaser.Scene {
         this.tutorialBodyText,
         this.tutorialObjectiveText,
         this.tutorialStartButton.gameObject,
+        this.tutorialNewGameButton.gameObject,
         this.tutorialControlText,
       ])
       .setDepth(100);
@@ -777,24 +806,48 @@ export class BattlefieldScene extends Phaser.Scene {
 
   private renderOpening(): void {
     const isDetailed = this.firstRunGuide.isDetailed;
+    const checkpoint = this.campaignCheckpoint;
     this.tutorialProgressText.setText(
-      isDetailed ? '장난감 전쟁 · 첫 출전' : '장난감 전쟁 · 다시 출전',
+      checkpoint === null
+        ? isDetailed
+          ? '장난감 전쟁 · 첫 출전'
+          : '장난감 전쟁 · 다시 출전'
+        : `자동 저장 · ${checkpoint.roundSession.currentRound}/${checkpoint.roundSession.normalRoundCount}R · 부품 ${checkpoint.constructionFunds}`,
     );
     this.tutorialRecordText.setText(
-      `${this.playerRecord.playerName}\n일반 ${this.normalProgressText()} · 최고 ${this.normalBestText()}\n챌린지 ${this.challengeBestText()}`,
+      [
+        this.playerRecord.playerName,
+        `일반 ${this.normalProgressText()} · 최고 ${this.normalBestText()}`,
+        `챌린지 ${this.challengeBestText()}`,
+      ].join('\n'),
     );
     this.tutorialTitleText.setText('내가 만든 방어선을,\n이번에는 내가 뚫는다');
     this.tutorialBodyText.setText(
-      isDetailed
-        ? '장난감 요새를 지킨 뒤 공격자로 역할을 바꿉니다.\n방어를 잘할수록 더 강한 공격 부대를 얻습니다.'
-        : '기지를 지키고, 같은 기지를 더 빠르게 돌파하세요.',
+      checkpoint !== null
+        ? `누적 공격 시간 ${this.formatTime(checkpoint.roundSession.totalAttackTimeMs)}\n저장된 설계와 부품으로 해당 준비 단계부터 재개합니다.`
+        : isDetailed
+          ? '장난감 요새를 지킨 뒤 공격자로 역할을 바꿉니다.\n방어를 잘할수록 더 강한 공격 부대를 얻습니다.'
+          : '기지를 지키고, 같은 기지를 더 빠르게 돌파하세요.',
     );
     this.tutorialObjectiveText.setText(
       '1  설계   →   2  방어   →   3  역할 반전   →   4  공략',
     );
     this.tutorialControlText.setText(
-      '[Esc] 안내 건너뛰기 · [Tab] 순위표 · [N] 닉네임',
+      checkpoint === null
+        ? '[Esc] 안내 건너뛰기 · [Tab] 순위표 · [N] 닉네임'
+        : '[Enter] 이어하기 · 새 게임은 버튼을 두 번 눌러 확인',
     );
+    this.tutorialStartButton.setLabel(
+      checkpoint === null
+        ? '게임 시작  [Enter]'
+        : `이어하기 · ${checkpoint.roundSession.currentRound}라운드  [Enter]`,
+    );
+    this.tutorialStartButton.gameObject.setPosition(
+      checkpoint === null ? 0 : -160,
+      187,
+    );
+    this.tutorialNewGameButton.setLabel('새 게임');
+    this.tutorialNewGameButton.setVisible(checkpoint !== null);
     this.tutorialOverlay.setVisible(true);
     this.hideGuideCoachMark();
     this.updatePhaseInterface();
@@ -802,7 +855,73 @@ export class BattlefieldScene extends Phaser.Scene {
 
   private startFromOpening(): void {
     if (this.phase !== 'tutorial') return;
+    if (this.campaignCheckpoint !== null) {
+      this.continueSavedCampaign();
+      return;
+    }
     this.finishOpening(false);
+  }
+
+  private requestNewCampaignFromOpening(): void {
+    if (this.phase !== 'tutorial' || this.campaignCheckpoint === null) return;
+    if (this.time.now > this.newGameResetArmedUntil) {
+      this.newGameResetArmedUntil = this.time.now + 3_000;
+      this.tutorialNewGameButton.setLabel('저장 삭제 후 시작?');
+      this.setStatus('새 게임을 시작하려면 3초 안에 버튼을 한 번 더 누르세요.', true);
+      return;
+    }
+
+    this.campaignSaveService.clear();
+    this.campaignCheckpoint = null;
+    this.newGameResetArmedUntil = 0;
+    this.renderOpening();
+    this.finishOpening(false);
+    this.setStatus('기존 자동 저장을 지우고 새 일반 모드를 시작했습니다.');
+  }
+
+  private continueSavedCampaign(): void {
+    const checkpoint = this.campaignCheckpoint;
+    if (checkpoint === null || this.phase !== 'tutorial') return;
+
+    try {
+      this.roundSession = RoundSession.restore(checkpoint.roundSession.snapshot);
+      this.editor.restoreCampaignState({
+        blueprint: checkpoint.defenseBlueprint.snapshot,
+        constructionFunds: checkpoint.constructionFunds,
+      });
+      this.firstRunGuide.complete();
+      this.firstRunGuideService.markCompleted();
+      this.tutorialOverlay.setVisible(false);
+      this.selectedStructureId = null;
+      this.combat = null;
+      this.clearAttackState();
+
+      if (checkpoint.phase === 'attack-preparation') {
+        if (checkpoint.squadPlan === null) {
+          throw new Error('Attack checkpoint requires a squad plan.');
+        }
+        this.squadPlan = SquadPlan.restore(checkpoint.squadPlan.snapshot);
+        this.phase = 'attack-preparation';
+        this.attackPreparationRemainingMs = ATTACK_PREPARATION_DURATION_MS;
+        this.selectedAttackLane = 1;
+        this.selectedAttackUnitKind = 'tank';
+      } else {
+        this.phase = 'preparation';
+        this.preparationRemainingMs =
+          this.currentRoundOnboarding().defensePreparationDurationMs;
+      }
+
+      this.setStatus(
+        `${this.roundName()} 자동 저장을 불러왔습니다. 설계, 부품 ${this.editor.constructionFunds}, 누적 공격 시간 ${this.formatTime(this.roundSession.totalAttackTimeMs)}.`,
+      );
+      this.updatePhaseInterface();
+      this.renderGuideCoachMark();
+      this.renderBattlefield();
+    } catch {
+      this.campaignSaveService.clear();
+      this.campaignCheckpoint = null;
+      this.scene.restart();
+    }
   }
 
   private skipDetailedGuide(): void {
@@ -815,6 +934,7 @@ export class BattlefieldScene extends Phaser.Scene {
   private finishOpening(skipped: boolean): void {
     if (!skipped) this.firstRunGuide.beginDefensePreparation();
     this.phase = 'preparation';
+    this.persistDefensePreparation();
     this.tutorialOverlay.setVisible(false);
     this.setStatus(
       skipped
@@ -1173,6 +1293,10 @@ export class BattlefieldScene extends Phaser.Scene {
 
     this.input.keyboard?.on('keydown-ESC', () => {
       if (this.phase === 'tutorial') {
+        if (this.campaignCheckpoint !== null) {
+          this.setStatus('이어하기 또는 새 게임 버튼을 선택하세요.');
+          return;
+        }
         this.skipDetailedGuide();
         return;
       }
@@ -1285,6 +1409,7 @@ export class BattlefieldScene extends Phaser.Scene {
     this.setStatus(
       `타워를 ${result.receipt.level}레벨로 강화하고 건설 부품 ${result.receipt.cost}을 사용했습니다.`,
     );
+    this.persistDefensePreparation();
     this.updatePhaseInterface();
     this.renderBattlefield();
   }
@@ -1293,6 +1418,7 @@ export class BattlefieldScene extends Phaser.Scene {
     if (this.phase !== 'preparation') return;
     if (!this.requireAdvancedDefenseEditing()) return;
     this.editor.saveBlueprint();
+    this.persistDefensePreparation();
     this.setStatus(
       `현재 설계와 남은 부품 ${this.editor.constructionFunds}을 저장 지점으로 지정했습니다.`,
     );
@@ -1310,6 +1436,7 @@ export class BattlefieldScene extends Phaser.Scene {
         : '복구할 저장 지점이 없습니다.',
       !restored,
     );
+    if (restored) this.persistDefensePreparation();
     this.updatePhaseInterface();
     this.renderBattlefield();
   }
@@ -1325,6 +1452,7 @@ export class BattlefieldScene extends Phaser.Scene {
         : '되돌릴 설계 변경이 없습니다.',
       !restored,
     );
+    if (restored) this.persistDefensePreparation();
     this.updatePhaseInterface();
     this.renderBattlefield();
   }
@@ -1340,6 +1468,7 @@ export class BattlefieldScene extends Phaser.Scene {
         : '다시 적용할 설계 변경이 없습니다.',
       !restored,
     );
+    if (restored) this.persistDefensePreparation();
     this.updatePhaseInterface();
     this.renderBattlefield();
   }
@@ -1369,6 +1498,7 @@ export class BattlefieldScene extends Phaser.Scene {
         : `${laneIndex + 1}번 진입로의 마지막 유닛을 제거하고 ${attackUnitCost(removed)}P를 환급했습니다.`,
       removed === null,
     );
+    if (removed !== null) this.persistAttackPreparation();
     this.updatePhaseInterface();
     this.renderBattlefield();
   }
@@ -1382,6 +1512,7 @@ export class BattlefieldScene extends Phaser.Scene {
         : `전체 편성을 비우고 출격 포인트 ${refunded}를 전액 환급했습니다.`,
       refunded === 0,
     );
+    if (refunded > 0) this.persistAttackPreparation();
     this.updatePhaseInterface();
     this.renderBattlefield();
   }
@@ -1394,6 +1525,7 @@ export class BattlefieldScene extends Phaser.Scene {
       this.squadPlan?.totalBudget,
     );
     this.selectedAttackLane = 1;
+    this.persistAttackPreparation();
     this.setStatus('방어선 상성을 고려한 추천 편성으로 초기화했습니다.');
     this.updatePhaseInterface();
     this.renderBattlefield();
@@ -1442,6 +1574,7 @@ export class BattlefieldScene extends Phaser.Scene {
       this.setStatus(
         `시설을 판매하고 부품 ${sale.receipt.refund}을 전액 환급받았습니다.`,
       );
+      this.persistDefensePreparation();
       this.renderBattlefield();
       return;
     }
@@ -1469,6 +1602,7 @@ export class BattlefieldScene extends Phaser.Scene {
     }
 
     this.selectedStructureId = null;
+    this.persistDefensePreparation();
     this.setStatus(
       `설계를 변경했습니다. 남은 건설 부품 ${this.editor.constructionFunds}.`,
     );
@@ -2304,6 +2438,7 @@ export class BattlefieldScene extends Phaser.Scene {
     }
 
     this.editor.saveBlueprint();
+    this.persistDefensePreparation();
     this.selectedStructureId = null;
     this.defenseStructureCountAtStart = this.editor.battlefield.structures.length;
     this.combat = new DefenseCombat(
@@ -2350,6 +2485,12 @@ export class BattlefieldScene extends Phaser.Scene {
         : null;
     if (defenseResult !== null && !this.roundSession.isDefenseComplete) {
       this.roundSession.recordDefenseVictory(defenseResult);
+      const resumeSquad = createPrototypeSquadPlan(
+        this.roundSession.currentRound,
+        true,
+        defenseResult.sortieReward.totalPoints,
+      );
+      this.persistAttackPreparation(resumeSquad);
     }
     const rewardPresentation =
       defenseResult === null
@@ -2439,6 +2580,7 @@ export class BattlefieldScene extends Phaser.Scene {
     this.attackPreparationRemainingMs = ATTACK_PREPARATION_DURATION_MS;
     this.selectedAttackLane = 1;
     this.selectedAttackUnitKind = 'tank';
+    this.persistAttackPreparation();
     this.resultOverlay.hide();
     this.tutorialOverlay.setVisible(false);
     this.setStatus(
@@ -2459,6 +2601,7 @@ export class BattlefieldScene extends Phaser.Scene {
         : '출격 포인트가 부족합니다.',
       !added,
     );
+    if (added) this.persistAttackPreparation();
     this.updatePhaseInterface();
     this.renderBattlefield();
   }
@@ -2469,6 +2612,8 @@ export class BattlefieldScene extends Phaser.Scene {
       this.setStatus('최소 한 명의 일반 유닛을 편성해야 합니다.', true);
       return;
     }
+
+    this.persistAttackPreparation();
 
     this.attackCombat = new AttackCombat(
       this.editor.battlefield,
@@ -2520,6 +2665,11 @@ export class BattlefieldScene extends Phaser.Scene {
     const completedRound = won
       ? this.roundSession.recordAttackVictory(this.attackCombat.elapsedTimeMs)
       : null;
+    if (won && completedRound !== null && !this.roundSession.isChallengeMode) {
+      this.persistNextRoundPreparation();
+    } else if (!won && !this.roundSession.isChallengeMode) {
+      this.clearCampaignCheckpoint();
+    }
     this.latestRecordNotice = '';
     let isChallengeNewBest = false;
     if (
@@ -2652,6 +2802,7 @@ export class BattlefieldScene extends Phaser.Scene {
     this.combat = null;
     this.clearAttackState();
     this.phase = 'preparation';
+    this.persistDefensePreparation();
     this.preparationRemainingMs =
       this.currentRoundOnboarding().defensePreparationDurationMs;
     this.selectedStructureId = null;
@@ -2685,6 +2836,7 @@ export class BattlefieldScene extends Phaser.Scene {
 
   private startChallengeMode(): void {
     if (this.phase !== 'campaign-complete') return;
+    this.clearCampaignCheckpoint();
     if (!this.roundSession.enterChallengeMode()) return;
     this.beginAdvancedRound(
       '아이가 없는 방에서 장난감들이 스스로 움직입니다. 챌린지 전쟁이 시작됩니다.',
@@ -2695,6 +2847,7 @@ export class BattlefieldScene extends Phaser.Scene {
     this.resetToPreparation();
     this.editor.grantConstructionFunds(ROUND_CONSTRUCTION_REWARD);
     this.editor.saveBlueprint();
+    this.persistDefensePreparation();
     const unlockMessage =
       this.roundSession.currentRound === 2
         ? ' 블록 박격포와 태엽 군단이 해금되었습니다.'
@@ -2707,6 +2860,7 @@ export class BattlefieldScene extends Phaser.Scene {
   }
 
   private showCampaignComplete(): void {
+    this.clearCampaignCheckpoint();
     const previousNormalBest = this.playerRecord.normalBest;
     const recordUpdate = this.gameRecordService.recordNormalCompletion(
       this.roundSession.totalAttackTimeMs,
@@ -2750,6 +2904,7 @@ export class BattlefieldScene extends Phaser.Scene {
   }
 
   private retryCampaign(): void {
+    this.clearCampaignCheckpoint();
     this.scene.restart({ startImmediately: true } satisfies BattlefieldSceneData);
   }
 
@@ -3047,6 +3202,66 @@ export class BattlefieldScene extends Phaser.Scene {
       'aria-label',
       `Toy Base Reversal · ${phaseLabels[this.phase]}`,
     );
+  }
+
+  private persistDefensePreparation(): void {
+    if (
+      this.roundSession.isChallengeMode ||
+      this.roundSession.isNormalModeComplete
+    ) {
+      return;
+    }
+    try {
+      this.campaignCheckpoint =
+        this.campaignSaveService.saveDefensePreparation(
+          this.roundSession,
+          this.editor,
+        );
+    } catch {
+      this.setStatus('브라우저에 캠페인을 자동 저장하지 못했습니다.', true);
+    }
+  }
+
+  private persistAttackPreparation(squadPlan = this.squadPlan): void {
+    if (
+      squadPlan === null ||
+      this.roundSession.isChallengeMode ||
+      this.roundSession.isNormalModeComplete
+    ) {
+      return;
+    }
+    try {
+      this.campaignCheckpoint =
+        this.campaignSaveService.saveAttackPreparation(
+          this.roundSession,
+          this.editor,
+          squadPlan,
+        );
+    } catch {
+      this.setStatus('브라우저에 공격 준비 상태를 자동 저장하지 못했습니다.', true);
+    }
+  }
+
+  private persistNextRoundPreparation(): void {
+    try {
+      this.campaignCheckpoint =
+        this.campaignSaveService.saveNextRoundPreparation(
+          this.roundSession,
+          this.editor,
+          ROUND_CONSTRUCTION_REWARD,
+        );
+    } catch {
+      this.setStatus('다음 라운드 진행을 자동 저장하지 못했습니다.', true);
+    }
+  }
+
+  private clearCampaignCheckpoint(): void {
+    try {
+      this.campaignSaveService.clear();
+      this.campaignCheckpoint = null;
+    } catch {
+      this.setStatus('브라우저의 캠페인 저장을 삭제하지 못했습니다.', true);
+    }
   }
 
   private roundLabel(): string {

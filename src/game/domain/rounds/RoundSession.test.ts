@@ -92,4 +92,29 @@ describe('RoundSession', () => {
       'Normal mode must be completed',
     );
   });
+
+  it('restores completed rounds, cumulative time, and a pending defense result', () => {
+    const original = new RoundSession(5);
+    original.recordDefenseVictory(defenseResult(9, 90));
+    original.recordAttackVictory(31_000);
+    original.advanceToNextRound();
+    original.recordDefenseVictory(defenseResult(12, 75));
+
+    const restored = RoundSession.restore(original.snapshot);
+
+    expect(restored.currentRound).toBe(2);
+    expect(restored.totalAttackTimeMs).toBe(31_000);
+    expect(restored.currentDefenseResult).toEqual(defenseResult(12, 75));
+  });
+
+  it('rejects a saved round that skips its completed round sequence', () => {
+    expect(() =>
+      RoundSession.restore({
+        normalRoundCount: 5,
+        currentRound: 3,
+        pendingDefenseResult: null,
+        completedRounds: [],
+      }),
+    ).toThrow('does not match completed rounds');
+  });
 });

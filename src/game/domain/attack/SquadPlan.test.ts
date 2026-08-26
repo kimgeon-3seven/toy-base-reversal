@@ -47,4 +47,34 @@ describe('SquadPlan', () => {
     expect(plan.remainingSortiePoints).toBe(12);
     expect(plan.unitCount).toBe(0);
   });
+
+  it('restores lane order, remaining points, and spawn settings', () => {
+    const original = new SquadPlan(18, 2, 3, 750);
+    original.addUnit(0, 'tank');
+    original.addUnit(0, 'ranger');
+    original.addUnit(2, 'swarm');
+
+    const restored = SquadPlan.restore(original.snapshot);
+
+    expect(restored.lanes).toEqual([
+      ['tank', 'ranger'],
+      [],
+      ['swarm'],
+    ]);
+    expect(restored.remainingBudget).toBe(original.remainingBudget);
+    expect(restored.buildSpawnSchedule()).toEqual(
+      original.buildSpawnSchedule(),
+    );
+  });
+
+  it('rejects a saved formation that exceeds its sortie budget', () => {
+    expect(() =>
+      SquadPlan.restore({
+        totalBudget: 3,
+        simultaneousCapacityPerLane: 2,
+        spawnIntervalMs: 900,
+        lanes: [['tank', 'tank']],
+      }),
+    ).toThrow('invalid unit plan');
+  });
 });

@@ -3,6 +3,13 @@ import { unitCost } from '../combat/UnitEconomy';
 
 export type AttackUnitKind = UnitArchetype;
 
+export interface SquadPlanSnapshot {
+  readonly totalBudget: number;
+  readonly simultaneousCapacityPerLane: number;
+  readonly spawnIntervalMs: number;
+  readonly lanes: readonly (readonly AttackUnitKind[])[];
+}
+
 export class SquadPlan {
   private readonly laneQueues: AttackUnitKind[][];
   private spentBudget = 0;
@@ -22,6 +29,32 @@ export class SquadPlan {
       throw new Error('Squad plan values must be positive.');
     }
     this.laneQueues = Array.from({ length: laneCount }, () => []);
+  }
+
+  public static restore(snapshot: SquadPlanSnapshot): SquadPlan {
+    if (!Array.isArray(snapshot.lanes) || snapshot.lanes.length === 0) {
+      throw new Error('A saved squad requires at least one lane.');
+    }
+    const plan = new SquadPlan(
+      snapshot.totalBudget,
+      snapshot.simultaneousCapacityPerLane,
+      snapshot.lanes.length,
+      snapshot.spawnIntervalMs,
+    );
+    for (const [laneIndex, lane] of snapshot.lanes.entries()) {
+      if (!Array.isArray(lane)) {
+        throw new Error('Saved squad lane is invalid.');
+      }
+      for (const kind of lane) {
+        if (
+          (kind !== 'tank' && kind !== 'swarm' && kind !== 'ranger') ||
+          !plan.addUnit(laneIndex, kind)
+        ) {
+          throw new Error('Saved squad contains an invalid unit plan.');
+        }
+      }
+    }
+    return plan;
   }
 
   public get remainingBudget(): number {
@@ -46,6 +79,15 @@ export class SquadPlan {
 
   public get lanes(): readonly (readonly AttackUnitKind[])[] {
     return this.laneQueues;
+  }
+
+  public get snapshot(): SquadPlanSnapshot {
+    return {
+      totalBudget: this.totalBudget,
+      simultaneousCapacityPerLane: this.simultaneousCapacityPerLane,
+      spawnIntervalMs: this.spawnIntervalMs,
+      lanes: this.laneQueues.map((lane) => [...lane]),
+    };
   }
 
   public addUnit(laneIndex: number, kind: AttackUnitKind): boolean {

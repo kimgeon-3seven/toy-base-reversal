@@ -13,6 +13,13 @@ export interface RoundResult {
   readonly attackTimeMs: number;
 }
 
+export interface RoundSessionSnapshot {
+  readonly normalRoundCount: number;
+  readonly currentRound: number;
+  readonly pendingDefenseResult: DefenseRoundResult | null;
+  readonly completedRounds: readonly RoundResult[];
+}
+
 export type GameMode = 'normal' | 'challenge';
 
 export class RoundSession {
@@ -24,6 +31,38 @@ export class RoundSession {
     if (!Number.isInteger(normalRoundCount) || normalRoundCount <= 0) {
       throw new Error('Normal round count must be a positive integer.');
     }
+  }
+
+  public static restore(snapshot: RoundSessionSnapshot): RoundSession {
+    const session = new RoundSession(snapshot.normalRoundCount);
+    if (
+      !Number.isInteger(snapshot.currentRound) ||
+      snapshot.currentRound <= 0 ||
+      !Array.isArray(snapshot.completedRounds)
+    ) {
+      throw new Error('Round session snapshot is invalid.');
+    }
+
+    for (const result of snapshot.completedRounds) {
+      if (result.roundNumber !== session.currentRound) {
+        throw new Error('Completed round sequence is invalid.');
+      }
+      session.recordDefenseVictory(result.defense);
+      session.recordAttackVictory(result.attackTimeMs);
+      if (session.currentRound < snapshot.currentRound) {
+        if (!session.advanceToNextRound()) {
+          throw new Error('Round session cannot advance to the saved round.');
+        }
+      }
+    }
+
+    if (session.currentRound !== snapshot.currentRound) {
+      throw new Error('Saved current round does not match completed rounds.');
+    }
+    if (snapshot.pendingDefenseResult !== null) {
+      session.recordDefenseVictory(snapshot.pendingDefenseResult);
+    }
+    return session;
   }
 
   public get currentRound(): number {
@@ -88,6 +127,27 @@ export class RoundSession {
       (total, result) => total + result.attackTimeMs,
       0,
     );
+  }
+
+  public get snapshot(): RoundSessionSnapshot {
+    return {
+      normalRoundCount: this.normalRoundCount,
+      currentRound: this.currentRoundNumber,
+      pendingDefenseResult:
+        this.pendingDefenseResult === null
+          ? null
+          : {
+              ...this.pendingDefenseResult,
+              sortieReward: { ...this.pendingDefenseResult.sortieReward },
+            },
+      completedRounds: this.completedRoundResults.map((result) => ({
+        ...result,
+        defense: {
+          ...result.defense,
+          sortieReward: { ...result.defense.sortieReward },
+        },
+      })),
+    };
   }
 
   public recordDefenseVictory(result: DefenseRoundResult): void {

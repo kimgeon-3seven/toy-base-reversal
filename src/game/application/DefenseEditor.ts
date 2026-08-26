@@ -1,6 +1,9 @@
 import type { Battlefield } from '../domain/battlefield/Battlefield';
 import type { BattlefieldResult } from '../domain/battlefield/BattlefieldResult';
-import type { DefenseBlueprint } from '../domain/battlefield/DefenseBlueprint';
+import {
+  DefenseBlueprint,
+  type DefenseBlueprintSnapshot,
+} from '../domain/battlefield/DefenseBlueprint';
 import type { ConstructionEconomy } from '../domain/economy/ConstructionEconomy';
 import type { GridPosition } from '../domain/grid/GridPosition';
 import type { TowerArchetype } from '../domain/combat/CombatArchetype';
@@ -27,6 +30,16 @@ const TOWER_HEALTH: Readonly<Record<TowerArchetype, number>> = {
   mortar: 115,
   piercer: 105,
 };
+
+export interface DefenseEditorCampaignState {
+  readonly blueprint: DefenseBlueprint;
+  readonly constructionFunds: number;
+}
+
+export interface DefenseEditorCampaignSnapshot {
+  readonly blueprint: DefenseBlueprintSnapshot;
+  readonly constructionFunds: number;
+}
 
 export class DefenseEditor {
   private nextStructureSequence = 1;
@@ -218,6 +231,36 @@ export class DefenseEditor {
     this.economy.grant(amount);
   }
 
+  public captureCampaignState(): DefenseEditorCampaignState {
+    return {
+      blueprint: this.battlefield.captureBlueprint(),
+      constructionFunds: this.economy.funds,
+    };
+  }
+
+  public captureSavedCampaignState(): DefenseEditorCampaignState {
+    if (
+      this.savedBlueprint === null ||
+      this.savedConstructionFunds === null
+    ) {
+      throw new Error('A saved defense blueprint is required.');
+    }
+    return {
+      blueprint: DefenseBlueprint.restore(this.savedBlueprint.snapshot),
+      constructionFunds: this.savedConstructionFunds,
+    };
+  }
+
+  public restoreCampaignState(snapshot: DefenseEditorCampaignSnapshot): void {
+    const blueprint = DefenseBlueprint.restore(snapshot.blueprint);
+    this.battlefield.restoreBlueprint(blueprint);
+    this.economy.restoreFunds(snapshot.constructionFunds);
+    this.savedBlueprint = this.battlefield.captureBlueprint();
+    this.savedConstructionFunds = this.economy.funds;
+    this.editHistory.clear();
+    this.synchronizeNextStructureSequence();
+  }
+
   private captureEditSnapshot(): DefenseEditSnapshot {
     return {
       blueprint: this.battlefield.captureBlueprint(),
@@ -228,5 +271,15 @@ export class DefenseEditor {
   private restoreEditSnapshot(snapshot: DefenseEditSnapshot): void {
     this.battlefield.restoreBlueprint(snapshot.blueprint);
     this.economy.restoreFunds(snapshot.constructionFunds);
+  }
+
+  private synchronizeNextStructureSequence(): void {
+    const structureIds = new Set(
+      this.battlefield.structures.map((structure) => structure.id),
+    );
+    this.nextStructureSequence = 1;
+    while (structureIds.has(`structure-${this.nextStructureSequence}`)) {
+      this.nextStructureSequence += 1;
+    }
   }
 }

@@ -1,5 +1,6 @@
 import Phaser from 'phaser';
 import { AudioSettingsService } from '../../application/AudioSettingsService';
+import { CampaignSaveService } from '../../application/CampaignSaveService';
 import { FirstRunGuideService } from '../../application/FirstRunGuideService';
 import { GameRecordService } from '../../application/GameRecordService';
 import { LeaderboardService } from '../../application/LeaderboardService';
@@ -14,6 +15,7 @@ import { DomNicknameEditor } from '../dom/DomNicknameEditor';
 import { LeaderboardRepositoryFactory } from '../http/LeaderboardRepositoryFactory';
 import { LocalStorageFirstRunGuideRepository } from '../storage/LocalStorageFirstRunGuideRepository';
 import { LocalStorageAudioSettingsRepository } from '../storage/LocalStorageAudioSettingsRepository';
+import { LocalStorageCampaignCheckpointRepository } from '../storage/LocalStorageCampaignCheckpointRepository';
 import { LocalStoragePlayerIdentityProvider } from '../storage/LocalStoragePlayerIdentityProvider';
 import { LocalStoragePlayerRecordRepository } from '../storage/LocalStoragePlayerRecordRepository';
 
@@ -55,6 +57,9 @@ export class PhaserGameRuntime implements GameRuntime {
     const audioSettingsService = new AudioSettingsService(
       new LocalStorageAudioSettingsRepository(window.localStorage),
     );
+    const campaignSaveService = new CampaignSaveService(
+      new LocalStorageCampaignCheckpointRepository(window.localStorage),
+    );
     const parent = document.getElementById(this.parentId);
     if (parent === null) {
       throw new Error(`Game parent element #${this.parentId} was not found.`);
@@ -84,6 +89,7 @@ export class PhaserGameRuntime implements GameRuntime {
           nicknameEditor,
           firstRunGuideService,
           audioSettingsService,
+          campaignSaveService,
           this.pageActivityMonitor,
           this.resultShareService,
         ),
