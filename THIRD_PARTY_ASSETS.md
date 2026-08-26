@@ -28,6 +28,17 @@ watermarks:
 - `public/assets/sprites/tower-defense/tower-piercer-v2.png`
 - `public/assets/sprites/tower-defense/core-v2.png`
 
+The following project-owned walk-animation source grids were generated with
+OpenAI's built-in image generation tool on 2026-08-26, then chroma-keyed,
+normalized, and assembled into transparent production sprite sheets by the
+project's deterministic PowerShell pipeline. Exact prompts and QA evidence are
+recorded in `docs/portfolio/iterations/022-windup-ranger-gait-v3.md`:
+
+- `artifacts/sprite-source/unit-windup-walk-grid-v3-magenta.png`
+- `artifacts/sprite-source/unit-ranger-walk-grid-v3-magenta.png`
+- `public/assets/sprites/tower-defense/unit-windup-walk-8way-v3.png`
+- `public/assets/sprites/tower-defense/unit-ranger-walk-8way-v3.png`
+
 ## Kenney
 
 Creator: Kenney Vleugels / Kenney.nl  

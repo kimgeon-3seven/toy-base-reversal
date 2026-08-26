@@ -53,10 +53,20 @@ if (
 }
 
 $package = Get-Item -LiteralPath $archivePath
-$hash = Get-FileHash -Algorithm SHA256 -LiteralPath $archivePath
+$sha256 = [System.Security.Cryptography.SHA256]::Create()
+$archiveStream = [System.IO.File]::OpenRead($archivePath)
+try {
+  $hash = -join (
+    $sha256.ComputeHash($archiveStream) |
+      ForEach-Object { $_.ToString('X2') }
+  )
+} finally {
+  $archiveStream.Dispose()
+  $sha256.Dispose()
+}
 [pscustomobject]@{
   Path = $package.FullName
   Megabytes = [math]::Round($package.Length / 1MB, 2)
   EntryCount = $entryNames.Count
-  Sha256 = $hash.Hash
+  Sha256 = $hash
 }
