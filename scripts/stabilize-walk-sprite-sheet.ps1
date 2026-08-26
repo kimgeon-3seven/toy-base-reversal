@@ -3,7 +3,9 @@ param(
   [string]$InputPath,
 
   [Parameter(Mandatory = $true)]
-  [string]$OutputPath
+  [string]$OutputPath,
+
+  [switch]$UniformCycle
 )
 
 Set-StrictMode -Version Latest
@@ -19,17 +21,31 @@ $contentHeight = 143
 $baselineY = 151
 
 # Contact -> passing -> opposite contact -> passing produces a seamless loop.
-# The southwest and west source rows have the most stable camera in frames 1-3.
-$frameSequences = @(
-  ,@(0, 1, 2, 1)
-  ,@(0, 1, 2, 1)
-  ,@(0, 1, 2, 1)
-  ,@(0, 1, 2, 1)
-  ,@(0, 1, 2, 1)
-  ,@(1, 2, 3, 2)
-  ,@(1, 2, 3, 2)
-  ,@(0, 1, 2, 1)
-)
+# Shield v1 needs alternate southwest and west source frames. Later sheets use
+# the authored contact frame in every direction so their idle pose stays grounded.
+$frameSequences = if ($UniformCycle) {
+  @(
+    ,@(0, 1, 2, 1)
+    ,@(0, 1, 2, 1)
+    ,@(0, 1, 2, 1)
+    ,@(0, 1, 2, 1)
+    ,@(0, 1, 2, 1)
+    ,@(0, 1, 2, 1)
+    ,@(0, 1, 2, 1)
+    ,@(0, 1, 2, 1)
+  )
+} else {
+  @(
+    ,@(0, 1, 2, 1)
+    ,@(0, 1, 2, 1)
+    ,@(0, 1, 2, 1)
+    ,@(0, 1, 2, 1)
+    ,@(0, 1, 2, 1)
+    ,@(1, 2, 3, 2)
+    ,@(1, 2, 3, 2)
+    ,@(0, 1, 2, 1)
+  )
+}
 
 function Find-VisibleBounds([System.Drawing.Bitmap]$bitmap) {
   $minimumX = $bitmap.Width

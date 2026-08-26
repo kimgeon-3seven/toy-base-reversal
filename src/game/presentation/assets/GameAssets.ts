@@ -76,7 +76,7 @@ export function preloadGameAssets(loader: Phaser.Loader.LoaderPlugin): void {
   loader.image(IMAGE_ASSETS.attackerSwarm, assetUrl(`${sprites}/unit-windup-v2.png`));
   loader.spritesheet(
     IMAGE_ASSETS.attackerSwarmWalk,
-    assetUrl(`${sprites}/unit-windup-walk-8way-v1.png`),
+    assetUrl(`${sprites}/unit-windup-walk-8way-v2.png`),
     { frameWidth: 160, frameHeight: 160 },
   );
   loader.spritesheet(
@@ -87,7 +87,7 @@ export function preloadGameAssets(loader: Phaser.Loader.LoaderPlugin): void {
   loader.image(IMAGE_ASSETS.attackerRanger, assetUrl(`${sprites}/unit-ranger-v2.png`));
   loader.spritesheet(
     IMAGE_ASSETS.attackerRangerWalk,
-    assetUrl(`${sprites}/unit-ranger-walk-8way-v1.png`),
+    assetUrl(`${sprites}/unit-ranger-walk-8way-v2.png`),
     { frameWidth: 160, frameHeight: 160 },
   );
   loader.spritesheet(

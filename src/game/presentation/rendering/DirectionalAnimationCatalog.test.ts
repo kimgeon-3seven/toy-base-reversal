@@ -19,6 +19,12 @@ describe('DirectionalAnimationCatalog', () => {
     expect(catalog.profileForUnit('ranger')?.id).toBe('ranger');
   });
 
+  it('keeps the already approved shield walk cycle unchanged', () => {
+    expect(catalog.profileForUnit('tank')?.walkFrameOffsets).toEqual([
+      0, 1, 2, 1,
+    ]);
+  });
+
   it('uses all four generated walk frames for the wind-up unit', () => {
     expect(catalog.profileForUnit('swarm')?.walkFrameOffsets).toEqual([
       0, 1, 2, 3,
