@@ -18,6 +18,7 @@ export interface DirectionalAnimationProfile {
   readonly id: string;
   readonly walkTexture: string;
   readonly attackTexture: string;
+  readonly walkFrameColumns: number;
   readonly walkFrameOffsets: readonly number[];
 }
 
@@ -36,6 +37,7 @@ const SHIELD_PROFILE: DirectionalAnimationProfile = {
   id: 'shield',
   walkTexture: IMAGE_ASSETS.attackerTankWalk,
   attackTexture: IMAGE_ASSETS.attackerTankAttack,
+  walkFrameColumns: 4,
   walkFrameOffsets: [0, 1, 2, 1],
 };
 
@@ -43,14 +45,16 @@ const WINDUP_PROFILE: DirectionalAnimationProfile = {
   id: 'windup',
   walkTexture: IMAGE_ASSETS.attackerSwarmWalk,
   attackTexture: IMAGE_ASSETS.attackerSwarmAttack,
-  walkFrameOffsets: [0, 1, 2, 3],
+  walkFrameColumns: 6,
+  walkFrameOffsets: [0, 1, 2, 3, 4, 5],
 };
 
 const RANGER_PROFILE: DirectionalAnimationProfile = {
   id: 'ranger',
   walkTexture: IMAGE_ASSETS.attackerRangerWalk,
   attackTexture: IMAGE_ASSETS.attackerRangerAttack,
-  walkFrameOffsets: [0, 1, 2, 3],
+  walkFrameColumns: 6,
+  walkFrameOffsets: [0, 1, 2, 3, 4, 5],
 };
 
 const UNIT_PROFILES: Readonly<
@@ -92,8 +96,11 @@ export class DirectionalAnimationCatalog {
     return `${profile.id}-${action}-${direction}`;
   }
 
-  public idleFrame(direction: SpriteDirection): number {
-    return this.directionRow(direction) * 4;
+  public idleFrame(
+    profile: DirectionalAnimationProfile,
+    direction: SpriteDirection,
+  ): number {
+    return this.directionRow(direction) * profile.walkFrameColumns;
   }
 
   public register(scene: Phaser.Scene): void {
@@ -133,7 +140,9 @@ export class DirectionalAnimationCatalog {
     const key = this.animationKey(profile, action, direction);
     if (scene.anims.exists(key)) return;
     const texture = action === 'walk' ? profile.walkTexture : profile.attackTexture;
-    const firstFrame = row * 4;
+    const firstFrame = row * (
+      action === 'walk' ? profile.walkFrameColumns : 4
+    );
     const frameOffsets =
       action === 'walk' ? profile.walkFrameOffsets : [0, 1, 2, 3];
     const frameNumbers = frameOffsets.map((offset) => firstFrame + offset);

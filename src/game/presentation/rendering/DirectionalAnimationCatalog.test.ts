@@ -25,21 +25,31 @@ describe('DirectionalAnimationCatalog', () => {
     ]);
   });
 
-  it('uses all four generated walk frames for the wind-up unit', () => {
+  it('uses the full six-frame ping-pong sheet for the wind-up unit', () => {
     expect(catalog.profileForUnit('swarm')?.walkFrameOffsets).toEqual([
-      0, 1, 2, 3,
+      0, 1, 2, 3, 4, 5,
     ]);
+    expect(catalog.profileForUnit('swarm')?.walkFrameColumns).toBe(6);
   });
 
-  it('uses all four generated walk frames for the rubber-band ranger', () => {
+  it('uses the full six-frame ping-pong sheet for the rubber-band ranger', () => {
     expect(catalog.profileForUnit('ranger')?.walkFrameOffsets).toEqual([
-      0, 1, 2, 3,
+      0, 1, 2, 3, 4, 5,
     ]);
+    expect(catalog.profileForUnit('ranger')?.walkFrameColumns).toBe(6);
   });
 
-  it('uses the first walk frame as the idle pose', () => {
-    expect(catalog.idleFrame('north')).toBe(0);
-    expect(catalog.idleFrame('south')).toBe(16);
-    expect(catalog.idleFrame('northwest')).toBe(28);
+  it('uses each profile column count when resolving idle poses', () => {
+    const shield = catalog.profileForUnit('tank');
+    const windup = catalog.profileForUnit('swarm');
+    expect(shield).not.toBeNull();
+    expect(windup).not.toBeNull();
+    if (shield === null || windup === null) return;
+
+    expect(catalog.idleFrame(shield, 'north')).toBe(0);
+    expect(catalog.idleFrame(shield, 'south')).toBe(16);
+    expect(catalog.idleFrame(shield, 'northwest')).toBe(28);
+    expect(catalog.idleFrame(windup, 'south')).toBe(24);
+    expect(catalog.idleFrame(windup, 'northwest')).toBe(42);
   });
 });

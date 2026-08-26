@@ -173,7 +173,7 @@ export class BattlefieldSpriteView {
         this.image.anims.timeScale = 1;
         this.image.setTexture(
           animationProfile.walkTexture,
-          this.animationCatalog.idleFrame(direction),
+          this.animationCatalog.idleFrame(animationProfile, direction),
         );
         this.currentAnimationKey = null;
       } else {
